@@ -58,7 +58,7 @@ Deposit nonce behavior.
     def run_cli(self, *args, success=True):
         result = subprocess.run(
             ["python3", "etc/scripts/local/upgrade-docs.py", *args],
-            cwd=self.root, capture_output=True, text=True,
+            cwd=self.root, capture_output=True, text=True, timeout=5,
         )
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         return result.stdout + result.stderr
@@ -85,6 +85,14 @@ Deposit nonce behavior.
         self.run_cli("stamp", "Regolith")
         consumer.write_text(consumer.read_text().replace("omit_nonce()", "include_nonce()"))
         self.assertIn("Regolith: production code changed", self.run_cli("check", success=False))
+
+    def test_attribute_like_source_does_not_stall_inventory(self):
+        consumer = self.root / "crates/execution/receipt/src/lib.rs"
+        repeated_attributes = "#[cfg(test)]#[" + "]#[" * 32 + "!"
+        consumer.write_text(
+            f'const ATTRIBUTES: &str = "{repeated_attributes}";\n' + consumer.read_text()
+        )
+        self.stamp()
 
     def test_inventory_tracks_new_and_deleted_consumers(self):
         self.stamp()
@@ -121,7 +129,7 @@ Deposit nonce behavior.
             self.assertIn("must use a feature gate", self.run_cli("check", success=False))
         consumer.write_text(original.replace(
             "fn fixture() {}", "fn fixture() { cfg.is_regolith_active(0); }"
-        ).replace("#[cfg(test)]", '#[cfg(all(test, feature = "std"))]')
+        ).replace("#[cfg(test)]", '#[cfg(all(test, feature = "std"))]\n#[rustfmt::skip]')
             .replace("mod tests", "pub(super) mod tests"))
         consumer.write_text("fn ethereum() { spec.is_enabled_in(SpecId::OSAKA); }\n" + consumer.read_text())
         self.run_cli("stamp", "Regolith")

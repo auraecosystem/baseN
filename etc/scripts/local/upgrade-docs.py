@@ -37,11 +37,23 @@ FORK_GATE_ADAPTERS = {
 
 def production(text: str) -> str:
     """Omit the colocated test module (required to be last by AGENTS.md)."""
-    return re.split(
-        r"#\[cfg\([^\n]*\btest\b[^\n]*\)\]\s*(?:#\[[^\n]*\]\s*)*"
-        r"(?:pub(?:\([^)]*\))?\s+)?mod\s+tests\b",
-        text, maxsplit=1,
-    )[0]
+    test_start = None
+    offset = 0
+    # Scan complete attribute lines rather than backtracking over an arbitrary
+    # number of attributes. Attribute-like strings in source must not stall CI.
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if (stripped.startswith("#[cfg(") and stripped.endswith(")]")
+                and re.search(r"\btest\b", stripped)):
+            if test_start is None:
+                test_start = offset + line.index("#")
+        elif test_start is not None:
+            if re.match(r"(?:pub(?:\([^)]*\))?\s+)?mod\s+tests\b", stripped):
+                return text[:test_start]
+            if stripped and not (stripped.startswith("#[") and stripped.endswith("]")):
+                test_start = None
+        offset += len(line)
+    return text
 
 
 def sources(root: Path) -> dict[str, str]:
@@ -90,10 +102,6 @@ def fork_gate_errors(code: dict[str, str]) -> list[str]:
     for path, text in code.items():
         if path in FORK_GATE_ADAPTERS:
             continue
-        # This one check must use block number, not the untrusted timestamp being
-        # validated: otherwise a forged pre-fork timestamp could bypass validation.
-        if path == "crates/execution/consensus/src/lib.rs":
-            text = text.replace("schedule.is_denim_active_at_block(header.number())", "")
         text = re.sub(r"//[^\n]*", "", text)
         for match in pattern.finditer(text):
             line = text.count("\n", 0, match.start()) + 1
