@@ -68,7 +68,7 @@ impl<T: CommsClient> OracleL2ChainProvider<T> {
         while header.number > block_number {
             if self
                 .rollup_config
-                .is_feature_active_at_timestamp(BaseFeature::HistoryStorage, header.timestamp)
+                .is_feature_active_cascading(BaseFeature::HistoryStorage, header.timestamp)
                 && !linear_fallback
             {
                 // If Isthmus is active, the EIP-2935 contract is used to perform leaping lookbacks
@@ -160,7 +160,7 @@ impl<T: CommsClient + Send + Sync> OracleL2ChainProvider<T> {
                 ommers: Vec::new(),
                 withdrawals: self
                     .rollup_config
-                    .is_feature_active_at_timestamp(BaseFeature::Withdrawals, timestamp)
+                    .is_feature_active_cascading(BaseFeature::Withdrawals, timestamp)
                     .then(|| alloy_eips::eip4895::Withdrawals::new(Vec::new())),
             },
         };

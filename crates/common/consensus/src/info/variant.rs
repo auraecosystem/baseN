@@ -50,10 +50,9 @@ impl L1BlockInfoTx {
         // In the first block of Ecotone, the L1Block contract has not been upgraded yet due to the
         // upgrade transactions being placed after the L1 info transaction. Because of this,
         // for the first block of Ecotone, we send a Bedrock style L1 block info transaction
-        if !rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::L1BlockInfoEcotone, l2_block_time)
-            || rollup_config.is_feature_activation_block(
-                BaseFeature::L1BlockInfoEcotone,
+        if !rollup_config.is_feature_active_cascading(BaseFeature::BlobAwareL1Fees, l2_block_time)
+            || rollup_config.is_feature_activation_block_cascading(
+                BaseFeature::BlobAwareL1Fees,
                 l2_block_time,
                 l2_parent_block_time,
             )
@@ -108,9 +107,9 @@ impl L1BlockInfoTx {
                     // not present, and L1 has activated pectra, the Prague blob fee schedule is used
                     // immediately.
                     (rollup_config
-                        .feature_activation_timestamp(BaseFeature::BlobScheduleCorrection)
+                        .configured_feature_activation_timestamp(BaseFeature::BlobScheduleCorrection)
                         .is_none() ||
-                        rollup_config.is_feature_active_at_timestamp(BaseFeature::BlobScheduleCorrection, l1_header.timestamp)) =>
+                        rollup_config.is_feature_active_cascading(BaseFeature::BlobScheduleCorrection, l1_header.timestamp)) =>
             {
                 BlobParams::prague()
             }
@@ -121,10 +120,9 @@ impl L1BlockInfoTx {
         let block_hash = l1_header.hash_slow();
         let base_fee = l1_header.base_fee_per_gas.unwrap_or(0);
 
-        if rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::L1BlockInfoJovian, l2_block_time)
-            && !rollup_config.is_feature_activation_block(
-                BaseFeature::L1BlockInfoJovian,
+        if rollup_config.is_feature_active_cascading(BaseFeature::DaFootprint, l2_block_time)
+            && !rollup_config.is_feature_activation_block_cascading(
+                BaseFeature::DaFootprint,
                 l2_block_time,
                 l2_parent_block_time,
             )
@@ -155,10 +153,9 @@ impl L1BlockInfoTx {
             )));
         }
 
-        if rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::L1BlockInfoIsthmus, l2_block_time)
-            && !rollup_config.is_feature_activation_block(
-                BaseFeature::L1BlockInfoIsthmus,
+        if rollup_config.is_feature_active_cascading(BaseFeature::OperatorFee, l2_block_time)
+            && !rollup_config.is_feature_activation_block_cascading(
+                BaseFeature::OperatorFee,
                 l2_block_time,
                 l2_parent_block_time,
             )
@@ -246,7 +243,7 @@ impl L1BlockInfoTx {
         // With the regolith upgrade, system transactions were deprecated, and we allocate
         // a constant amount of gas for special transactions like L1 block info.
         if rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::DepositGasAccounting, l2_block_time)
+            .is_feature_active_cascading(BaseFeature::DepositGasAccounting, l2_block_time)
         {
             deposit_tx.is_system_transaction = false;
             deposit_tx.gas_limit = REGOLITH_SYSTEM_TX_GAS;

@@ -219,7 +219,7 @@ impl OPSuccinctDataFetcher {
         // Add warning if the chain is pre-Holocene, as derivation is significantly slower.
         let unix_timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         if !rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::StrictBatchOrdering, unix_timestamp)
+            .is_feature_active_cascading(BaseFeature::StrictDerivationOrdering, unix_timestamp)
         {
             tracing::warn!(
                 "Chain is not using Holocene upgrade. This will cause significant performance degradation compared to chains that have activated Holocene."

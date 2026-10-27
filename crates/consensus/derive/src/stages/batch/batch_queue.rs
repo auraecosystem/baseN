@@ -133,7 +133,7 @@ where
         // discard batches. Apply completed retention decisions synchronously after validation.
         let strict_batch_ordering = self
             .cfg
-            .is_feature_active_at_timestamp(BaseFeature::StrictBatchOrdering, origin.timestamp);
+            .is_feature_active_cascading(BaseFeature::StrictDerivationOrdering, origin.timestamp);
         let mut retention = Vec::with_capacity(self.batches.len());
         while retention.len() < self.batches.len() {
             let index = retention.len();
@@ -206,10 +206,9 @@ where
         let force_empty_batches =
             (expiry_epoch == origin.number && empty) || expiry_epoch < origin.number;
         let first_of_epoch = epoch.number == parent.l1_origin.number + 1;
-        let same_second = self
-            .cfg
-            .is_feature_active_at_timestamp(BaseFeature::SameSecondL1Origin, next_timestamp)
-            && next_timestamp == parent.block_info.timestamp;
+        let same_second =
+            self.cfg.is_feature_active_cascading(BaseFeature::SubsecondBlocks, next_timestamp)
+                && next_timestamp == parent.block_info.timestamp;
 
         // If the sequencer window did not expire,
         // there is still room to receive batches for the current epoch.
@@ -272,8 +271,8 @@ where
             data.check_batch(&self.cfg, &self.l1_blocks, parent, &mut self.fetcher).await;
         // Post-Holocene, future batches are dropped due to prevent gaps.
         let drop = validity.is_drop()
-            || (self.cfg.is_feature_active_at_timestamp(
-                BaseFeature::StrictBatchOrdering,
+            || (self.cfg.is_feature_active_cascading(
+                BaseFeature::StrictDerivationOrdering,
                 origin.timestamp,
             ) && validity.is_future());
         if drop {
@@ -309,7 +308,7 @@ where
     /// Also returns the boolean that indicates if the batch is the last block in the batch.
     async fn next_batch(&mut self, parent: L2BlockInfo) -> PipelineResult<SingleBatch> {
         let next = parent.block_info.number + 1;
-        if self.cfg.is_feature_active_at_timestamp(
+        if self.cfg.is_feature_active_cascading(
             BaseFeature::SingularBatchesOnly,
             self.cfg.l2_block_timestamp(next),
         ) && !self.next_spans.is_empty()

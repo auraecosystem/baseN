@@ -57,7 +57,7 @@ where
     pub fn prune(&mut self, origin: BlockInfo) {
         if !self
             .rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::StrictFrameOrdering, origin.timestamp)
+            .is_feature_active_cascading(BaseFeature::StrictDerivationOrdering, origin.timestamp)
         {
             return;
         }

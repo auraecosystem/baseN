@@ -49,26 +49,23 @@ where
         )
         .root();
         let receipts_root = compute_receipts_root(&ex_result.receipts, self.config, timestamp);
-        let withdrawals_root = if self
-            .config
-            .is_feature_active_at_timestamp(BaseFeature::L2ToL1MessageRoot, timestamp)
-        {
-            Some(self.message_passer_account(block_env.number.saturating_to::<u64>())?)
-        } else if self.config.is_feature_active_at_timestamp(BaseFeature::Withdrawals, timestamp) {
-            Some(EMPTY_ROOT_HASH)
-        } else {
-            None
-        };
+        let withdrawals_root =
+            if self.config.is_feature_active_cascading(BaseFeature::L2ToL1MessageRoot, timestamp) {
+                Some(self.message_passer_account(block_env.number.saturating_to::<u64>())?)
+            } else if self.config.is_feature_active_cascading(BaseFeature::Withdrawals, timestamp) {
+                Some(EMPTY_ROOT_HASH)
+            } else {
+                None
+            };
 
         // Compute the logs bloom from the receipts generated during block execution.
         let logs_bloom = logs_bloom(ex_result.receipts.iter().flat_map(|r| r.logs()));
 
         // Compute Cancun fields, if active.
         let (blob_gas_used, excess_blob_gas) =
-            if self.config.is_feature_active_at_timestamp(BaseFeature::DaFootprint, timestamp) {
+            if self.config.is_feature_active_cascading(BaseFeature::DaFootprint, timestamp) {
                 (Some(ex_result.blob_gas_used), Some(0))
-            } else if self.config.is_feature_active_at_timestamp(BaseFeature::BlobHeader, timestamp)
-            {
+            } else if self.config.is_feature_active_cascading(BaseFeature::BlobHeader, timestamp) {
                 (Some(0), Some(0))
             } else {
                 Default::default()
@@ -80,12 +77,12 @@ where
         // If the payload's `eip_1559_params` are equal to `0`, then the header's `extraData`
         // field is set to the encoded canyon base fee parameters.
         let encoded_base_fee_params = match self.config {
-            config if config.is_feature_active_at_timestamp(BaseFeature::MinBaseFee, timestamp) => {
+            config if config.is_feature_active_cascading(BaseFeature::MinBaseFee, timestamp) => {
                 let extra_data = encode_jovian_eip_1559_params(self.config, attrs)?;
                 Ok(extra_data)
             }
             config
-                if config.is_feature_active_at_timestamp(
+                if config.is_feature_active_cascading(
                     BaseFeature::DynamicBaseFeeParameters,
                     timestamp,
                 ) =>
@@ -98,7 +95,7 @@ where
         // The requests hash on Base, if Isthmus is active, is always the empty SHA256 hash.
         let requests_hash = self
             .config
-            .is_feature_active_at_timestamp(BaseFeature::EmptyRequestsHash, timestamp)
+            .is_feature_active_cascading(BaseFeature::EmptyRequestsHash, timestamp)
             .then_some(EMPTY_REQUESTS_HASH);
 
         // Construct the new header.
@@ -192,8 +189,8 @@ pub fn compute_receipts_root(
     // the receipt root calculation does not include the deposit nonce in the
     // receipt encoding. In the Regolith upgrade, we must strip the deposit nonce
     // from the receipt encoding to match the receipt root calculation.
-    if config.is_feature_active_at_timestamp(BaseFeature::DepositNonce, timestamp)
-        && !config.is_feature_active_at_timestamp(BaseFeature::DepositReceiptVersion, timestamp)
+    if config.is_feature_active_cascading(BaseFeature::DepositNonce, timestamp)
+        && !config.is_feature_active_cascading(BaseFeature::DepositReceiptVersion, timestamp)
     {
         let receipts = receipts
             .iter()

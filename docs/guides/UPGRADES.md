@@ -12,17 +12,27 @@ Base protocol behaviors and the upgrade that introduces each one. Consumers chec
 feature, not a hardfork name. These are consensus rules, **not Cargo features or
 operator-selectable flags**. Moving a feature to another upgrade changes consensus.
 
-- `RollupConfig::is_feature_active_at_timestamp(feature, timestamp)` checks the
+- `RollupConfig::is_feature_active_cascading(feature, timestamp)` checks the
   rollup schedule, including its historical cascade and runtime overrides.
 - `Upgrades::is_feature_active_at_timestamp(feature, timestamp)` checks execution
   fork conditions. `BaseSpecId::is_feature_enabled(feature)` checks a resolved EVM
   spec. Do not replace one adapter with another: sparse and non-monotonic schedules
   have historically different cascade semantics.
-- `is_feature_activation_block(feature, timestamp, parent_timestamp)` detects a
-  transition using the **actual parent timestamp**, not an assumed block interval.
-- `feature_activation_timestamp(feature)` reads the configured activation for
-  scheduling calculations. An absent timestamp is not by itself proof that a
-  cascaded rollup feature is disabled; use the boolean feature query for behavior.
+- `RollupConfig::is_feature_activation_block_cascading` and
+  `Upgrades::is_feature_activation_block` detect transitions using their respective
+  activation semantics and the **actual parent timestamp**, not an assumed interval.
+- `RollupConfig::configured_feature_activation_timestamp` reads the runtime-aware
+  configured boundary without cascading. `Upgrades::feature_activation_timestamp`
+  reads the resolved execution fork condition. An absent configured timestamp is
+  not proof that a cascaded rollup feature is disabled; use the boolean query for
+  behavior. The distinct names make the semantics explicit for concrete, `Arc`,
+  and generic receivers.
+
+A feature covers a cohesive protocol change across its consumers, not a separate
+switch for every layer. Fee calculation and the L1 attributes supplying its inputs
+share a feature; callers still retain their different timestamp sources and
+first-block format exceptions. Independent rules stay separate even when they
+activate together.
 
 The L1 blob data source intentionally captures its configured feature boundary at
 construction; it does not follow subsequent runtime overrides or rollup cascades.
@@ -76,8 +86,10 @@ for protocol changes, activation-sensitive bug fixes, and consensus-critical rev
 Benchmark-only changes that do not alter protocol behavior do not require it.
 
 1. Reuse a feature when changing the same behavior. Otherwise add a semantic entry
-   and its contract description to `BaseFeature`. Distinct behaviors must not be
-   coupled just because they happen to ship in the same upgrade.
+   and its contract description to `BaseFeature`. Include the inputs and transition
+   work belonging to that rule rather than adding one feature per implementation
+   layer. Distinct behaviors must not be coupled just because they happen to ship
+   in the same upgrade.
 2. For a new upgrade, extend [the canonical enum and configuration](../../crates/common/genesis/src/chain/upgrade.rs),
    schedule resolution, [chain defaults](../../crates/common/chains/src/config.rs),
    and [execution fork mapping](../../crates/common/chains/src/upgrade.rs).
@@ -118,7 +130,7 @@ attributes, and L1 data fees. It is block-activated rather than timestamp-activa
 The [fork mapping](../../crates/common/chains/src/upgrade.rs) pairs its execution
 rules with Ethereum Merge; later sections describe departures from this baseline.
 
-<!-- REVIEW:Bedrock:07656cb4b2b9ff65 -->
+<!-- REVIEW:Bedrock:39b4976e12cbcc2b -->
 <!-- FEATURES:Bedrock:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -131,7 +143,7 @@ Regolith changes deposit gas accounting, system-transaction handling, receipt
 nonces, and the legacy signature-byte allowance in L1 fee calculation. Receipt and
 gas rules must agree between block builders, re-execution, and proof execution.
 
-<!-- REVIEW:Regolith:13fb87dee28a077c -->
+<!-- REVIEW:Regolith:38b586499a2ab7fe -->
 <!-- FEATURES:Regolith:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -146,7 +158,7 @@ Canyon adds versioned deposit receipts and the CREATE2 deployer transition. Empt
 withdrawals fields and changed fee parameters accompany Ethereum Shanghai support.
 Receipt-root compatibility retains the historical Regolith-era encoding distinction.
 
-<!-- REVIEW:Canyon:17bf324b2a4df4ff -->
+<!-- REVIEW:Canyon:0c6ead9f2008f812 -->
 <!-- FEATURES:Canyon:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -164,7 +176,7 @@ Delta permits span batches. It changes batching and derivation, not the EVM spec
 ladder. Derivation must reject span batches before activation rather than merely
 relying on the batcher to choose the correct encoding.
 
-<!-- REVIEW:Delta:a0c71295975bd04c -->
+<!-- REVIEW:Delta:a8700781fd8035f7 -->
 <!-- FEATURES:Delta:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -178,17 +190,15 @@ and the blob-capable Engine API/header path alongside Ethereum Cancun. The activ
 block still uses the preceding L1 attributes layout where the existing transition
 rules require it; genesis activation is not an ordinary transition block.
 
-<!-- REVIEW:Ecotone:0fd189b7f8e63a84 -->
+<!-- REVIEW:Ecotone:ddf3b1c13e485933 -->
 <!-- FEATURES:Ecotone:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
-| `BlobAwareL1Fees` | Price L1 data with separate calldata and blob fee scalars. | [`crates/common/evm/src/l1block.rs`](../../crates/common/evm/src/l1block.rs), [`crates/common/l1-fees/src/params.rs`](../../crates/common/l1-fees/src/params.rs), [`crates/execution/rpc/src/eth/receipt.rs`](../../crates/execution/rpc/src/eth/receipt.rs) |
-| `L1BlockInfoEcotone` | Encode the compact blob-aware L1 attributes deposit after the transition block. | [`crates/common/consensus/src/info/variant.rs`](../../crates/common/consensus/src/info/variant.rs) |
+| `BlobAwareL1Fees` | Price L1 data with separate calldata and blob fee scalars, encode compact blob-aware L1 attributes after the transition block, and validate blob-aware system config scalars while ignoring legacy overhead. | [`crates/common/consensus/src/info/variant.rs`](../../crates/common/consensus/src/info/variant.rs), [`crates/common/evm/src/l1block.rs`](../../crates/common/evm/src/l1block.rs), [`crates/common/l1-fees/src/params.rs`](../../crates/common/l1-fees/src/params.rs), [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs), [`crates/consensus/derive/src/stages/traversal/polling.rs`](../../crates/consensus/derive/src/stages/traversal/polling.rs), [`crates/consensus/service/src/actors/l1_watcher/actor.rs`](../../crates/consensus/service/src/actors/l1_watcher/actor.rs), [`crates/execution/rpc/src/eth/receipt.rs`](../../crates/execution/rpc/src/eth/receipt.rs) |
 | `BlobHeader` | Include blob gas fields in L2 headers, initially with zero values. | [`crates/builder/core/src/flashblocks/context.rs`](../../crates/builder/core/src/flashblocks/context.rs), [`crates/execution/consensus/src/lib.rs`](../../crates/execution/consensus/src/lib.rs), [`crates/execution/evm/src/build.rs`](../../crates/execution/evm/src/build.rs), [`crates/proof/executor/src/builder/assemble.rs`](../../crates/proof/executor/src/builder/assemble.rs) |
 | `BeaconRoots` | Include the parent beacon block root and apply the beacon-roots system call. | [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs), [`crates/consensus/service/src/standalone.rs`](../../crates/consensus/service/src/standalone.rs), [`crates/execution/node/src/node.rs`](../../crates/execution/node/src/node.rs), [`crates/execution/rpc/src/config.rs`](../../crates/execution/rpc/src/config.rs) |
 | `ConstantBlobBaseFee` | Set the L2 EVM blob base fee to the protocol's constant minimum. | [`crates/proof/executor/src/builder/env.rs`](../../crates/proof/executor/src/builder/env.rs) |
 | `BlobDataSource` | Read blob batch data after the explicitly configured L1 timestamp boundary. | [`crates/consensus/derive/src/sources/ethereum.rs`](../../crates/consensus/derive/src/sources/ethereum.rs) |
-| `BlobFeeScalarUpdates` | Validate blob-aware fee scalars and ignore legacy overhead in system config updates. | [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs), [`crates/consensus/derive/src/stages/traversal/polling.rs`](../../crates/consensus/derive/src/stages/traversal/polling.rs), [`crates/consensus/service/src/actors/l1_watcher/actor.rs`](../../crates/consensus/service/src/actors/l1_watcher/actor.rs) |
 | `EngineApiV3` | Use the blob-capable V3 Engine API payload methods. | [`crates/consensus/engine/src/versions.rs`](../../crates/consensus/engine/src/versions.rs) |
 | `EcotoneUpgradeTransactions` | Inject the Ecotone contract-upgrade deposit bundle at the transition. | [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs), [`crates/consensus/service/src/actors/sequencer/pool.rs`](../../crates/consensus/service/src/actors/sequencer/pool.rs) |
 | `GossipPayloadV3` | Publish and accept blob-capable gossip payloads. | [`crates/consensus/gossip/src/handler.rs`](../../crates/consensus/gossip/src/handler.rs) |
@@ -200,7 +210,7 @@ Fjord adds FastLZ-estimated L1 fees, Brotli channels, larger channel limits, fix
 sequencer drift, and RIP-7212 signature verification. Compression acceptance belongs
 to derivation as well as the batch encoder. Upgrade deposits change onchain contracts.
 
-<!-- REVIEW:Fjord:4285ba1af5118d08 -->
+<!-- REVIEW:Fjord:17ab8d59d7638c4b -->
 <!-- FEATURES:Fjord:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -219,7 +229,7 @@ Granite limits pairing-precompile input and changes channel resource limits/time
 The derivation queue and EVM precompile checks protect different resources and have
 separate features even though they share an activation upgrade.
 
-<!-- REVIEW:Granite:f57376cc2968be3a -->
+<!-- REVIEW:Granite:43704699f83e5a6d -->
 <!-- FEATURES:Granite:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -233,16 +243,15 @@ separate features even though they share an activation upgrade.
 Holocene makes derivation ordering stricter and carries dynamic EIP-1559 parameters
 in header extra data. Builders, engine validation, and proof reconstruction must
 interpret the same fee parameters, including at the transition.
+`StrictDerivationOrdering` covers the batch, channel, and frame ordering model
+and the pipeline reset that transitions into it; fee parameters remain independent.
 
-<!-- REVIEW:Holocene:7dce6bee9f1bfd2b -->
+<!-- REVIEW:Holocene:735fbbd07747ea59 -->
 <!-- FEATURES:Holocene:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
 | `DynamicBaseFeeParameters` | Read dynamic EIP-1559 parameters from the block header extra data. | [`crates/builder/core/src/flashblocks/context.rs`](../../crates/builder/core/src/flashblocks/context.rs), [`crates/builder/core/src/flashblocks/payload.rs`](../../crates/builder/core/src/flashblocks/payload.rs), [`crates/common/genesis/src/system/config.rs`](../../crates/common/genesis/src/system/config.rs), [`crates/consensus/engine/src/attributes.rs`](../../crates/consensus/engine/src/attributes.rs), [`crates/consensus/protocol/src/utils.rs`](../../crates/consensus/protocol/src/utils.rs), [`crates/execution/chainspec/src/spec.rs`](../../crates/execution/chainspec/src/spec.rs), [`crates/execution/consensus/src/validation/holocene.rs`](../../crates/execution/consensus/src/validation/holocene.rs), [`crates/execution/node/src/engine.rs`](../../crates/execution/node/src/engine.rs), [`crates/execution/payload/src/payload.rs`](../../crates/execution/payload/src/payload.rs), [`crates/proof/executor/src/builder/assemble.rs`](../../crates/proof/executor/src/builder/assemble.rs), [`crates/proof/executor/src/builder/env.rs`](../../crates/proof/executor/src/builder/env.rs), [`crates/proof/host/src/handler.rs`](../../crates/proof/host/src/handler.rs) |
-| `StrictBatchOrdering` | Apply strict batch ordering and revised invalid-batch handling. | [`crates/consensus/derive/src/stages/batch/batch_provider.rs`](../../crates/consensus/derive/src/stages/batch/batch_provider.rs), [`crates/consensus/derive/src/stages/batch/batch_queue.rs`](../../crates/consensus/derive/src/stages/batch/batch_queue.rs), [`crates/consensus/derive/src/stages/batch/batch_stream.rs`](../../crates/consensus/derive/src/stages/batch/batch_stream.rs), [`crates/consensus/protocol/src/batch/single.rs`](../../crates/consensus/protocol/src/batch/single.rs), [`crates/consensus/protocol/src/batch/span.rs`](../../crates/consensus/protocol/src/batch/span.rs), [`crates/proof/zk/witness/src/fetcher.rs`](../../crates/proof/zk/witness/src/fetcher.rs) |
-| `StrictChannelOrdering` | Assemble one channel at a time instead of using the legacy channel bank. | [`crates/consensus/derive/src/stages/channel/channel_provider.rs`](../../crates/consensus/derive/src/stages/channel/channel_provider.rs) |
-| `StrictFrameOrdering` | Drop frames that violate channel and frame ordering. | [`crates/consensus/derive/src/stages/frame_queue.rs`](../../crates/consensus/derive/src/stages/frame_queue.rs) |
-| `DerivationPipelineReset` | Reset the derivation pipeline when crossing into strict ordering. | [`crates/consensus/derive/src/stages/traversal/polling.rs`](../../crates/consensus/derive/src/stages/traversal/polling.rs) |
+| `StrictDerivationOrdering` | Apply strict batch ordering and revised invalid-batch handling, assemble one channel at a time, drop out-of-order frames, and reset the pipeline when crossing into these rules. | [`crates/consensus/derive/src/stages/batch/batch_provider.rs`](../../crates/consensus/derive/src/stages/batch/batch_provider.rs), [`crates/consensus/derive/src/stages/batch/batch_queue.rs`](../../crates/consensus/derive/src/stages/batch/batch_queue.rs), [`crates/consensus/derive/src/stages/batch/batch_stream.rs`](../../crates/consensus/derive/src/stages/batch/batch_stream.rs), [`crates/consensus/derive/src/stages/channel/channel_provider.rs`](../../crates/consensus/derive/src/stages/channel/channel_provider.rs), [`crates/consensus/derive/src/stages/frame_queue.rs`](../../crates/consensus/derive/src/stages/frame_queue.rs), [`crates/consensus/derive/src/stages/traversal/polling.rs`](../../crates/consensus/derive/src/stages/traversal/polling.rs), [`crates/consensus/protocol/src/batch/single.rs`](../../crates/consensus/protocol/src/batch/single.rs), [`crates/consensus/protocol/src/batch/span.rs`](../../crates/consensus/protocol/src/batch/span.rs), [`crates/proof/zk/witness/src/fetcher.rs`](../../crates/proof/zk/witness/src/fetcher.rs) |
 | `DepositsOnlyOnInvalidPayload` | Retry invalid execution payloads as deposits-only payloads. | [`crates/consensus/engine/src/task_queue/tasks/seal/task.rs`](../../crates/consensus/engine/src/task_queue/tasks/seal/task.rs), [`crates/proof/driver/src/core.rs`](../../crates/proof/driver/src/core.rs), [`crates/proof/zk/utils/src/client.rs`](../../crates/proof/zk/utils/src/client.rs) |
 | `HoloceneTransitionNoTxPool` | Exclude transaction-pool transactions from the Holocene transition block. | [`crates/consensus/service/src/actors/sequencer/pool.rs`](../../crates/consensus/service/src/actors/sequencer/pool.rs) |
 <!-- FEATURES:Holocene:END -->
@@ -253,7 +262,7 @@ This optional correction selects the L1 blob fee schedule used to construct L1
 attributes for affected networks. It is independent of the execution fork ladder;
 do not infer it from the highest active Base EVM spec or enable it on every network.
 
-<!-- REVIEW:PectraBlobSchedule:d186294c029bb11b -->
+<!-- REVIEW:PectraBlobSchedule:25d7861573a658e0 -->
 <!-- FEATURES:PectraBlobSchedule:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -266,13 +275,14 @@ Isthmus introduces operator fees, the L2-to-L1 message-passer storage root in th
 header, extended L1 attributes, and upgrade deposits alongside Ethereum Prague.
 Execution requests and Engine API versioning must stay consistent across producer,
 validator, and proof paths. BLS precompiles have Base-specific input bounds.
+`OperatorFee` also selects the attributes supplying its parameters, but the new
+attributes format still starts after the transition block.
 
-<!-- REVIEW:Isthmus:58b7ebc528a4ba4f -->
+<!-- REVIEW:Isthmus:e96282eb4c9d01ee -->
 <!-- FEATURES:Isthmus:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
-| `OperatorFee` | Charge the operator fee in addition to execution and L1 data fees. | [`crates/common/evm/src/handler.rs`](../../crates/common/evm/src/handler.rs), [`crates/common/evm/src/l1block.rs`](../../crates/common/evm/src/l1block.rs), [`crates/common/evm2/src/handler.rs`](../../crates/common/evm2/src/handler.rs), [`crates/consensus/protocol/src/utils.rs`](../../crates/consensus/protocol/src/utils.rs) |
-| `L1BlockInfoIsthmus` | Include operator fee fields in the L1 attributes deposit after the transition block. | [`crates/common/consensus/src/info/variant.rs`](../../crates/common/consensus/src/info/variant.rs) |
+| `OperatorFee` | Charge the operator fee in addition to execution and L1 data fees, and include its fields in the L1 attributes deposit after the transition block. | [`crates/common/consensus/src/info/variant.rs`](../../crates/common/consensus/src/info/variant.rs), [`crates/common/evm/src/handler.rs`](../../crates/common/evm/src/handler.rs), [`crates/common/evm/src/l1block.rs`](../../crates/common/evm/src/l1block.rs), [`crates/common/evm2/src/handler.rs`](../../crates/common/evm2/src/handler.rs), [`crates/consensus/protocol/src/utils.rs`](../../crates/consensus/protocol/src/utils.rs) |
 | `BlsInputLimits` | Bound BLS12-381 multi-scalar multiplication and pairing input sizes. | [`crates/common/evm2/src/precompiles.rs`](../../crates/common/evm2/src/precompiles.rs), [`crates/common/precompiles/src/provider.rs`](../../crates/common/precompiles/src/provider.rs) |
 | `Eip7702` | Permit EIP-7702 set-code transactions in batches. | [`crates/consensus/protocol/src/batch/single.rs`](../../crates/consensus/protocol/src/batch/single.rs), [`crates/consensus/protocol/src/batch/span.rs`](../../crates/consensus/protocol/src/batch/span.rs) |
 | `HistoryStorage` | Apply the historical-block-hash storage system call. | [`crates/execution/rpc/src/config.rs`](../../crates/execution/rpc/src/config.rs), [`crates/proof/proof/src/l2/chain_provider.rs`](../../crates/proof/proof/src/l2/chain_provider.rs) |
@@ -289,15 +299,16 @@ validator, and proof paths. BLS precompiles have Base-specific input bounds.
 Jovian adds DA-footprint accounting, a minimum base fee, revised operator-fee scaling,
 extended L1 attributes, upgrade deposits, and tighter variable-input precompile
 bounds. DA budgeting affects transaction selection as well as block validation.
+`DaFootprint` also selects the attributes supplying its scalar after the transition
+block. DA-aware base fees and minimum base fees remain separately named rules.
 
-<!-- REVIEW:Jovian:d04deef4344d9403 -->
+<!-- REVIEW:Jovian:c0ace2adb7154d92 -->
 <!-- FEATURES:Jovian:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
 | `ScaledOperatorFees` | Scale the operator fee scalar component by 100 instead of dividing by one million. | [`crates/common/l1-fees/src/params.rs`](../../crates/common/l1-fees/src/params.rs) |
-| `DaFootprint` | Meter transaction DA footprint against the block budget. | [`crates/builder/core/src/flashblocks/context.rs`](../../crates/builder/core/src/flashblocks/context.rs), [`crates/common/evm/src/executor/block_executor.rs`](../../crates/common/evm/src/executor/block_executor.rs), [`crates/common/evm/src/l1block.rs`](../../crates/common/evm/src/l1block.rs), [`crates/common/evm2/src/executor.rs`](../../crates/common/evm2/src/executor.rs), [`crates/consensus/gossip/src/block_validity.rs`](../../crates/consensus/gossip/src/block_validity.rs), [`crates/execution/consensus/src/lib.rs`](../../crates/execution/consensus/src/lib.rs), [`crates/execution/consensus/src/validation/mod.rs`](../../crates/execution/consensus/src/validation/mod.rs), [`crates/execution/evm/src/build.rs`](../../crates/execution/evm/src/build.rs), [`crates/execution/flashblocks/src/state_builder.rs`](../../crates/execution/flashblocks/src/state_builder.rs), [`crates/execution/payload/src/builder.rs`](../../crates/execution/payload/src/builder.rs), [`crates/execution/rpc/src/eth/receipt.rs`](../../crates/execution/rpc/src/eth/receipt.rs), [`crates/execution/txpool/src/validator.rs`](../../crates/execution/txpool/src/validator.rs), [`crates/proof/executor/src/builder/assemble.rs`](../../crates/proof/executor/src/builder/assemble.rs) |
+| `DaFootprint` | Meter transaction DA footprint against the block budget, and include the DA footprint scalar in L1 attributes after the transition block. | [`crates/builder/core/src/flashblocks/context.rs`](../../crates/builder/core/src/flashblocks/context.rs), [`crates/common/consensus/src/info/variant.rs`](../../crates/common/consensus/src/info/variant.rs), [`crates/common/evm/src/executor/block_executor.rs`](../../crates/common/evm/src/executor/block_executor.rs), [`crates/common/evm/src/l1block.rs`](../../crates/common/evm/src/l1block.rs), [`crates/common/evm2/src/executor.rs`](../../crates/common/evm2/src/executor.rs), [`crates/consensus/gossip/src/block_validity.rs`](../../crates/consensus/gossip/src/block_validity.rs), [`crates/execution/consensus/src/lib.rs`](../../crates/execution/consensus/src/lib.rs), [`crates/execution/consensus/src/validation/mod.rs`](../../crates/execution/consensus/src/validation/mod.rs), [`crates/execution/evm/src/build.rs`](../../crates/execution/evm/src/build.rs), [`crates/execution/flashblocks/src/state_builder.rs`](../../crates/execution/flashblocks/src/state_builder.rs), [`crates/execution/payload/src/builder.rs`](../../crates/execution/payload/src/builder.rs), [`crates/execution/rpc/src/eth/receipt.rs`](../../crates/execution/rpc/src/eth/receipt.rs), [`crates/execution/txpool/src/validator.rs`](../../crates/execution/txpool/src/validator.rs), [`crates/proof/executor/src/builder/assemble.rs`](../../crates/proof/executor/src/builder/assemble.rs) |
 | `DaAwareBaseFee` | Calculate the base fee from the larger of execution gas and DA footprint, with a floor. | [`crates/execution/chainspec/src/spec.rs`](../../crates/execution/chainspec/src/spec.rs), [`crates/proof/executor/src/builder/env.rs`](../../crates/proof/executor/src/builder/env.rs) |
-| `L1BlockInfoJovian` | Include the DA footprint scalar in L1 attributes after the transition block. | [`crates/common/consensus/src/info/variant.rs`](../../crates/common/consensus/src/info/variant.rs) |
 | `TightBn254PairingInputLimit` | Tighten the bn254 pairing input limit. | [`crates/common/evm2/src/precompiles.rs`](../../crates/common/evm2/src/precompiles.rs), [`crates/common/precompiles/src/provider.rs`](../../crates/common/precompiles/src/provider.rs) |
 | `TightBlsInputLimits` | Tighten BLS12-381 multi-scalar multiplication and pairing input limits. | [`crates/common/evm2/src/precompiles.rs`](../../crates/common/evm2/src/precompiles.rs), [`crates/common/precompiles/src/provider.rs`](../../crates/common/precompiles/src/provider.rs) |
 | `MinBaseFee` | Enforce the minimum base fee carried in block extra data. | [`crates/builder/core/src/flashblocks/context.rs`](../../crates/builder/core/src/flashblocks/context.rs), [`crates/builder/core/src/flashblocks/payload.rs`](../../crates/builder/core/src/flashblocks/payload.rs), [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs), [`crates/consensus/engine/src/attributes.rs`](../../crates/consensus/engine/src/attributes.rs), [`crates/consensus/protocol/src/utils.rs`](../../crates/consensus/protocol/src/utils.rs), [`crates/consensus/service/src/standalone.rs`](../../crates/consensus/service/src/standalone.rs), [`crates/execution/consensus/src/validation/holocene.rs`](../../crates/execution/consensus/src/validation/holocene.rs), [`crates/execution/node/src/engine.rs`](../../crates/execution/node/src/engine.rs), [`crates/execution/payload/src/payload.rs`](../../crates/execution/payload/src/payload.rs), [`crates/proof/executor/src/builder/assemble.rs`](../../crates/proof/executor/src/builder/assemble.rs), [`crates/proof/executor/src/builder/env.rs`](../../crates/proof/executor/src/builder/env.rs), [`crates/proof/host/src/handler.rs`](../../crates/proof/host/src/handler.rs) |
@@ -310,7 +321,7 @@ Azul pairs Base execution with Ethereum Osaka and its transaction gas cap and op
 changes. Base precompiles adopt the updated MODEXP/P256 rules while preserving
 Base-specific bounds. Ethereum-defined rules continue to use Ethereum spec gates.
 
-<!-- REVIEW:Azul:83d1d989ec839314 -->
+<!-- REVIEW:Azul:8366968c79e7642f -->
 <!-- FEATURES:Azul:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -326,7 +337,7 @@ Beryl adds native token, factory, policy, and activation-registry precompiles.
 These dynamic precompiles are installed separately from the static Ethereum table;
 their contract/storage behavior is part of consensus, not an RPC-only facility.
 
-<!-- REVIEW:Beryl:970e3dcad2de56fc -->
+<!-- REVIEW:Beryl:191e77282032c9c1 -->
 <!-- FEATURES:Beryl:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -345,7 +356,7 @@ activation-registry authorization/value handling, and adds transaction context a
 nonce-manager precompiles. Existing onchain state must keep its historical behavior
 when replayed under earlier specs.
 
-<!-- REVIEW:Cobalt:827abb198f0f86eb -->
+<!-- REVIEW:Cobalt:16a98e7b031de615 -->
 <!-- FEATURES:Cobalt:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -367,19 +378,20 @@ the Base time predeploy, expanded sequencer drift, and revised native contract
 implementations. This spans sequencing, batching, gossip, Engine/RPC formats,
 execution, and proofs. Activation rounds to a legacy timestamp slot; subsequent
 blocks advance by 200ms. Never infer the parent by subtracting the old block time.
+`SubsecondBlocks` includes the timestamp schedule, transition gas-parameter scaling,
+and retaining the parent's L1 origin within a whole second. One-shot payload
+building and singular-only batching remain separate features.
 
-<!-- REVIEW:Denim:c9035e97dea067e4 -->
+<!-- REVIEW:Denim:820b7874d2fb8f1c -->
 <!-- FEATURES:Denim:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
 | `AssetPrecompileV3` | Use the third B20 asset contract implementation. | [`crates/common/precompiles/src/b20_asset/versions.rs`](../../crates/common/precompiles/src/b20_asset/versions.rs) |
 | `StablecoinPrecompileV3` | Use the third B20 stablecoin contract implementation. | [`crates/common/precompiles/src/b20_stablecoin/versions.rs`](../../crates/common/precompiles/src/b20_stablecoin/versions.rs) |
 | `PolicyPrecompileV3` | Use the third B20 policy contract implementation. | [`crates/common/precompiles/src/policy/versions.rs`](../../crates/common/precompiles/src/policy/versions.rs) |
-| `MillisecondTimestamps` | Use deterministic 200ms block timestamps and the Base time predeploy. | [`crates/common/evm/src/base_time.rs`](../../crates/common/evm/src/base_time.rs), [`crates/common/evm2/src/base_time.rs`](../../crates/common/evm2/src/base_time.rs), [`crates/common/genesis/src/rollup.rs`](../../crates/common/genesis/src/rollup.rs), [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs), [`crates/consensus/derive/src/stages/batch/batch_validator.rs`](../../crates/consensus/derive/src/stages/batch/batch_validator.rs), [`crates/consensus/service/src/actors/sequencer/actor.rs`](../../crates/consensus/service/src/actors/sequencer/actor.rs), [`crates/consensus/service/src/standalone.rs`](../../crates/consensus/service/src/standalone.rs), [`crates/consensus/service/src/standalone_dev.rs`](../../crates/consensus/service/src/standalone_dev.rs), [`crates/execution/consensus/src/lib.rs`](../../crates/execution/consensus/src/lib.rs), [`crates/execution/evm/src/forecast.rs`](../../crates/execution/evm/src/forecast.rs), [`crates/execution/metering/src/meter.rs`](../../crates/execution/metering/src/meter.rs), [`crates/execution/node/src/engine.rs`](../../crates/execution/node/src/engine.rs), [`crates/execution/rpc/src/eth/call.rs`](../../crates/execution/rpc/src/eth/call.rs), [`crates/execution/txpool-rpc/src/rpc.rs`](../../crates/execution/txpool-rpc/src/rpc.rs), [`crates/execution/txpool/src/validator.rs`](../../crates/execution/txpool/src/validator.rs), [`etc/systems/src/l2/snapshot_stack.rs`](../../etc/systems/src/l2/snapshot_stack.rs) |
+| `SubsecondBlocks` | Use deterministic 200ms block timestamps and the Base time predeploy, scale legacy whole-second gas parameters, and retain the parent's L1 origin within the same second. | [`crates/common/evm/src/base_time.rs`](../../crates/common/evm/src/base_time.rs), [`crates/common/evm2/src/base_time.rs`](../../crates/common/evm2/src/base_time.rs), [`crates/common/genesis/src/rollup.rs`](../../crates/common/genesis/src/rollup.rs), [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs), [`crates/consensus/derive/src/stages/batch/batch_queue.rs`](../../crates/consensus/derive/src/stages/batch/batch_queue.rs), [`crates/consensus/derive/src/stages/batch/batch_validator.rs`](../../crates/consensus/derive/src/stages/batch/batch_validator.rs), [`crates/consensus/protocol/src/batch/single.rs`](../../crates/consensus/protocol/src/batch/single.rs), [`crates/consensus/service/src/actors/sequencer/actor.rs`](../../crates/consensus/service/src/actors/sequencer/actor.rs), [`crates/consensus/service/src/actors/sequencer/l1_origin/selector.rs`](../../crates/consensus/service/src/actors/sequencer/l1_origin/selector.rs), [`crates/consensus/service/src/standalone.rs`](../../crates/consensus/service/src/standalone.rs), [`crates/consensus/service/src/standalone_dev.rs`](../../crates/consensus/service/src/standalone_dev.rs), [`crates/execution/consensus/src/lib.rs`](../../crates/execution/consensus/src/lib.rs), [`crates/execution/evm/src/forecast.rs`](../../crates/execution/evm/src/forecast.rs), [`crates/execution/metering/src/meter.rs`](../../crates/execution/metering/src/meter.rs), [`crates/execution/node/src/engine.rs`](../../crates/execution/node/src/engine.rs), [`crates/execution/rpc/src/eth/call.rs`](../../crates/execution/rpc/src/eth/call.rs), [`crates/execution/txpool-rpc/src/rpc.rs`](../../crates/execution/txpool-rpc/src/rpc.rs), [`crates/execution/txpool/src/validator.rs`](../../crates/execution/txpool/src/validator.rs), [`etc/systems/src/l2/snapshot_stack.rs`](../../etc/systems/src/l2/snapshot_stack.rs) |
 | `ExtendedSequencerDrift` | Use the extended six-hour sequencer drift bound. | [`crates/common/genesis/src/rollup.rs`](../../crates/common/genesis/src/rollup.rs) |
 | `OneShotPayloadBuilding` | Build and finalize payloads once instead of replacing them for higher fees. | [`crates/builder/multiplex/src/router.rs`](../../crates/builder/multiplex/src/router.rs), [`crates/execution/payload/src/builder.rs`](../../crates/execution/payload/src/builder.rs) |
-| `GasParameterScaling` | Scale legacy whole-second gas parameters for subsecond blocks. | [`crates/consensus/derive/src/attributes/stateful.rs`](../../crates/consensus/derive/src/attributes/stateful.rs) |
-| `SameSecondL1Origin` | Keep the parent's L1 origin until the L2 timestamp advances to a new whole second. | [`crates/consensus/derive/src/stages/batch/batch_queue.rs`](../../crates/consensus/derive/src/stages/batch/batch_queue.rs), [`crates/consensus/derive/src/stages/batch/batch_validator.rs`](../../crates/consensus/derive/src/stages/batch/batch_validator.rs), [`crates/consensus/protocol/src/batch/single.rs`](../../crates/consensus/protocol/src/batch/single.rs), [`crates/consensus/service/src/actors/sequencer/l1_origin/selector.rs`](../../crates/consensus/service/src/actors/sequencer/l1_origin/selector.rs) |
 | `SingularBatchesOnly` | Reject span batches and encode only singular batches for subsecond blocks. | [`crates/consensus/derive/src/stages/batch/batch_queue.rs`](../../crates/consensus/derive/src/stages/batch/batch_queue.rs), [`crates/consensus/derive/src/stages/batch/batch_stream.rs`](../../crates/consensus/derive/src/stages/batch/batch_stream.rs), [`crates/consensus/protocol/src/batch/span.rs`](../../crates/consensus/protocol/src/batch/span.rs) |
 <!-- FEATURES:Denim:END -->
 
@@ -389,7 +401,7 @@ Everest adds enshrined EIP-8130 account-abstraction transactions and native nonc
 manager deployment. Transaction validation, pool admission, execution, and related
 RPC methods must agree on feature activation; RPC visibility alone is not enforcement.
 
-<!-- REVIEW:Everest:c35ce7722b6f35a9 -->
+<!-- REVIEW:Everest:19bec84ef6c1c408 -->
 <!-- FEATURES:Everest:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -405,7 +417,7 @@ not an L1-contract-backed network activation. Runtime signals cannot schedule it
 Do not treat enum ordering or a future timestamp in an announcement as evidence of
 production activation.
 
-<!-- REVIEW:Zenith:380c3d5753d7b722 -->
+<!-- REVIEW:Zenith:648d2e5bc9346ed0 -->
 <!-- FEATURES:Zenith:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |

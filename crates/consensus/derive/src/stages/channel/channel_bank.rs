@@ -66,7 +66,7 @@ where
         let origin = self.origin().ok_or(PipelineError::MissingOrigin.crit())?;
         let max_channel_bank_size = if self
             .cfg
-            .is_feature_active_at_timestamp(BaseFeature::ChannelBankSizeExpansion, origin.timestamp)
+            .is_feature_active_cascading(BaseFeature::ChannelBankSizeExpansion, origin.timestamp)
         {
             FJORD_MAX_CHANNEL_BANK_SIZE
         } else {
@@ -152,7 +152,7 @@ where
         // timestamp.
         if !self
             .cfg
-            .is_feature_active_at_timestamp(BaseFeature::ReadyChannelSelection, origin.timestamp)
+            .is_feature_active_cascading(BaseFeature::ReadyChannelSelection, origin.timestamp)
         {
             return self.try_read_channel_at_index(0).map(Some);
         }

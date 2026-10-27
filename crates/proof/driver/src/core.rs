@@ -92,7 +92,7 @@ where
                 Err(e) => {
                     error!(target: "client", error = %e, "Failed to execute L2 block");
 
-                    if !cfg.is_feature_active_at_timestamp(
+                    if !cfg.is_feature_active_cascading(
                         BaseFeature::DepositsOnlyOnInvalidPayload,
                         attributes.payload_attributes.timestamp,
                     ) {

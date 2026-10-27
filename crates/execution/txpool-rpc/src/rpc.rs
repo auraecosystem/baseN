@@ -221,11 +221,11 @@ where
         if self
             .provider
             .chain_spec()
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, latest_timestamp)
-            || self.provider.chain_spec().is_feature_active_at_timestamp(
-                BaseFeature::MillisecondTimestamps,
-                next_legacy_timestamp,
-            )
+            .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, latest_timestamp)
+            || self
+                .provider
+                .chain_spec()
+                .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, next_legacy_timestamp)
         {
             RollupConfig::NATIVE_SUBSECOND_BLOCK_INTERVAL_MILLIS
         } else {

@@ -491,7 +491,7 @@ impl SpanBatch {
                 }
 
                 // If isthmus is not active yet and the transaction is a 7702, drop the batch.
-                if !cfg.is_feature_active_at_timestamp(BaseFeature::Eip7702, batch.timestamp)
+                if !cfg.is_feature_active_cascading(BaseFeature::Eip7702, batch.timestamp)
                     && tx.as_ref().first() == Some(&(OpTxType::Eip7702 as u8))
                 {
                     warn!(target: "batch_span", tx_index = i, "EIP-7702 transactions are not supported pre-isthmus");
@@ -499,7 +499,7 @@ impl SpanBatch {
                 }
 
                 // If Everest is not active yet and the transaction is an 8130, drop the batch.
-                if !cfg.is_feature_active_at_timestamp(BaseFeature::Eip8130, batch.timestamp)
+                if !cfg.is_feature_active_cascading(BaseFeature::Eip8130, batch.timestamp)
                     && tx.as_ref().first() == Some(&(OpTxType::Eip8130 as u8))
                 {
                     warn!(target: "batch_span", tx_index = i, "EIP-8130 transactions are not supported pre-Everest");
@@ -597,7 +597,7 @@ impl SpanBatch {
             return (BatchValidity::Undecided, None);
         }
         let next = l2_safe_head.block_info.number + 1;
-        if cfg.is_feature_active_at_timestamp(
+        if cfg.is_feature_active_cascading(
             BaseFeature::SingularBatchesOnly,
             cfg.l2_block_timestamp(next),
         ) {
@@ -621,7 +621,7 @@ impl SpanBatch {
             }
             batch_origin = l1_origins[1];
         }
-        if !cfg.is_feature_active_at_timestamp(BaseFeature::SpanBatches, batch_origin.timestamp) {
+        if !cfg.is_feature_active_cascading(BaseFeature::SpanBatches, batch_origin.timestamp) {
             warn!(
                 target: "batch_span",
                 "received SpanBatch (id {:?}) with L1 origin (timestamp {}) before Delta upgrade",
@@ -640,8 +640,8 @@ impl SpanBatch {
             );
 
             // After holocene is activated, gaps are disallowed.
-            if cfg.is_feature_active_at_timestamp(
-                BaseFeature::StrictBatchOrdering,
+            if cfg.is_feature_active_cascading(
+                BaseFeature::StrictDerivationOrdering,
                 inclusion_block.timestamp,
             ) {
                 return (BatchValidity::Drop(BatchDropReason::FutureTimestampHolocene), None);
@@ -652,8 +652,8 @@ impl SpanBatch {
         // Drop the batch if it has no new blocks after the safe head.
         if self.final_timestamp() < next_timestamp {
             warn!(target: "batch_span", "span batch has no new blocks after safe head");
-            return if cfg.is_feature_active_at_timestamp(
-                BaseFeature::StrictBatchOrdering,
+            return if cfg.is_feature_active_cascading(
+                BaseFeature::StrictDerivationOrdering,
                 inclusion_block.timestamp,
             ) {
                 (BatchValidity::Past, None)

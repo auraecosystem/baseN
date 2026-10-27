@@ -205,7 +205,7 @@ impl BlockHandler {
         let mut block: Block<BaseTxEnvelope> = envelope.payload.clone().try_into_block()?;
         block.header.parent_beacon_block_root = envelope.parent_beacon_block_root;
         // If isthmus is active, set the requests hash to the empty hash.
-        if self.rollup_config.is_feature_active_at_timestamp(
+        if self.rollup_config.is_feature_active_cascading(
             BaseFeature::EmptyRequestsHash,
             envelope.payload.timestamp(),
         ) {
@@ -289,7 +289,7 @@ impl BlockHandler {
         ) -> Result<(), BlockInvalidError> {
             // If Jovian is not active, the blob gas used should be zero.
             if !rollup_config
-                .is_feature_active_at_timestamp(BaseFeature::DaFootprint, block.timestamp())
+                .is_feature_active_cascading(BaseFeature::DaFootprint, block.timestamp())
                 && block.blob_gas_used != 0
             {
                 return Err(BlockInvalidError::BlobGasUsed);

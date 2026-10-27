@@ -141,7 +141,7 @@ where
 
             let max_rlp_bytes_per_channel = if self
                 .cfg
-                .is_feature_active_at_timestamp(BaseFeature::LargeChannels, origin.timestamp)
+                .is_feature_active_cascading(BaseFeature::LargeChannels, origin.timestamp)
             {
                 RollupConfig::MAX_RLP_BYTES_PER_CHANNEL_FJORD
             } else {

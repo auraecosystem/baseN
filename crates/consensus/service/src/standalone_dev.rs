@@ -183,10 +183,9 @@ impl StandaloneDevChain {
         .ok();
         if self.state.is_none()
             && head_millis.is_some()
-            && !self.rollup_config.is_feature_active_at_timestamp(
-                BaseFeature::MillisecondTimestamps,
-                head.header.timestamp,
-            )
+            && !self
+                .rollup_config
+                .is_feature_active_cascading(BaseFeature::SubsecondBlocks, head.header.timestamp)
         {
             return Err(StandaloneDevError::MissingState {
                 path: self.state_path,
@@ -207,10 +206,7 @@ impl StandaloneDevChain {
             .upgrade_activation_timestamp(BaseUpgrade::Denim)
             .expect("standalone schedules always activate Denim");
         let scheduled_millis = rollup_config
-            .is_feature_active_at_timestamp(
-                BaseFeature::MillisecondTimestamps,
-                head.header.timestamp,
-            )
+            .is_feature_active_cascading(BaseFeature::SubsecondBlocks, head.header.timestamp)
             .then(|| rollup_config.l2_block_timestamp_millis(head_id.number));
         if head_millis != scheduled_millis {
             return Err(mismatch("Denim schedule"));

@@ -200,7 +200,7 @@ impl RollupConfig {
     ///
     /// Earlier upgrades through Isthmus are implied by later configured upgrades even when
     /// their own explicit timestamp lies in the future. Base-specific upgrades do not cascade.
-    pub fn is_feature_active_at_timestamp(&self, feature: BaseFeature, timestamp: u64) -> bool {
+    pub fn is_feature_active_cascading(&self, feature: BaseFeature, timestamp: u64) -> bool {
         match feature.activation_upgrade() {
             BaseUpgrade::Bedrock => true,
             BaseUpgrade::Regolith => self.is_regolith_active(timestamp),
@@ -224,19 +224,19 @@ impl RollupConfig {
 
     /// Whether this block crosses the behavior's activation boundary relative to its parent.
     /// Callers retain protocol-specific exceptions for activation at genesis or delayed formats.
-    pub fn is_feature_activation_block(
+    pub fn is_feature_activation_block_cascading(
         &self,
         feature: BaseFeature,
         timestamp: u64,
         parent_timestamp: u64,
     ) -> bool {
-        self.is_feature_active_at_timestamp(feature, timestamp)
-            && !self.is_feature_active_at_timestamp(feature, parent_timestamp)
+        self.is_feature_active_cascading(feature, timestamp)
+            && !self.is_feature_active_cascading(feature, parent_timestamp)
     }
 
     /// The runtime-aware configured timestamp, without the historical active-state cascade.
     /// `None` means unscheduled (including an explicit runtime `Never` override).
-    pub fn feature_activation_timestamp(&self, feature: BaseFeature) -> Option<u64> {
+    pub fn configured_feature_activation_timestamp(&self, feature: BaseFeature) -> Option<u64> {
         self.upgrade_activation_timestamp(feature.activation_upgrade())
     }
 
@@ -385,9 +385,9 @@ impl RollupConfig {
 
     /// Returns the max sequencer drift for the given timestamp.
     pub fn max_sequencer_drift(&self, timestamp: u64) -> u64 {
-        if self.is_feature_active_at_timestamp(BaseFeature::ExtendedSequencerDrift, timestamp) {
+        if self.is_feature_active_cascading(BaseFeature::ExtendedSequencerDrift, timestamp) {
             Self::DENIM_MAX_SEQUENCER_DRIFT
-        } else if self.is_feature_active_at_timestamp(BaseFeature::FixedSequencerDrift, timestamp) {
+        } else if self.is_feature_active_cascading(BaseFeature::FixedSequencerDrift, timestamp) {
             Self::FJORD_MAX_SEQUENCER_DRIFT
         } else {
             self.max_sequencer_drift
@@ -396,7 +396,7 @@ impl RollupConfig {
 
     /// Returns the max rlp bytes per channel for the given timestamp.
     pub fn max_rlp_bytes_per_channel(&self, timestamp: u64) -> u64 {
-        if self.is_feature_active_at_timestamp(BaseFeature::LargeChannels, timestamp) {
+        if self.is_feature_active_cascading(BaseFeature::LargeChannels, timestamp) {
             Self::MAX_RLP_BYTES_PER_CHANNEL_FJORD
         } else {
             Self::MAX_RLP_BYTES_PER_CHANNEL_BEDROCK
@@ -405,7 +405,7 @@ impl RollupConfig {
 
     /// Returns the channel timeout for the given timestamp.
     pub fn channel_timeout(&self, timestamp: u64) -> u64 {
-        if self.is_feature_active_at_timestamp(BaseFeature::ShortChannelTimeout, timestamp) {
+        if self.is_feature_active_cascading(BaseFeature::ShortChannelTimeout, timestamp) {
             self.granite_channel_timeout
         } else {
             self.channel_timeout
@@ -429,7 +429,7 @@ impl RollupConfig {
             genesis_timestamp: self.genesis.l2_time,
             legacy_block_interval: NonZeroU64::new(self.block_time)?,
             denim_activation_timestamp: self
-                .feature_activation_timestamp(BaseFeature::MillisecondTimestamps)?,
+                .configured_feature_activation_timestamp(BaseFeature::SubsecondBlocks)?,
         })
     }
 
@@ -617,25 +617,25 @@ mod tests {
         for &feature in BaseFeature::ALL {
             let mut cfg = RollupConfig::default();
             if feature.activation_upgrade() == BaseUpgrade::Bedrock {
-                assert!(cfg.is_feature_active_at_timestamp(feature, 0));
-                assert_eq!(cfg.feature_activation_timestamp(feature), None);
-                assert!(!cfg.is_feature_activation_block(feature, 1, 0));
+                assert!(cfg.is_feature_active_cascading(feature, 0));
+                assert_eq!(cfg.configured_feature_activation_timestamp(feature), None);
+                assert!(!cfg.is_feature_activation_block_cascading(feature, 1, 0));
                 continue;
             }
-            assert!(!cfg.is_feature_active_at_timestamp(feature, u64::MAX), "{feature:?}");
-            assert_eq!(cfg.feature_activation_timestamp(feature), None);
+            assert!(!cfg.is_feature_active_cascading(feature, u64::MAX), "{feature:?}");
+            assert_eq!(cfg.configured_feature_activation_timestamp(feature), None);
 
             cfg.set_upgrade_activation_timestamp(feature.activation_upgrade(), 10);
-            assert!(!cfg.is_feature_active_at_timestamp(feature, 9), "{feature:?}");
-            assert!(cfg.is_feature_active_at_timestamp(feature, 10), "{feature:?}");
-            assert!(cfg.is_feature_active_at_timestamp(feature, 11), "{feature:?}");
-            assert!(cfg.is_feature_activation_block(feature, 10, 9), "{feature:?}");
-            assert!(!cfg.is_feature_activation_block(feature, 10, 10), "{feature:?}");
-            assert_eq!(cfg.feature_activation_timestamp(feature), Some(10));
+            assert!(!cfg.is_feature_active_cascading(feature, 9), "{feature:?}");
+            assert!(cfg.is_feature_active_cascading(feature, 10), "{feature:?}");
+            assert!(cfg.is_feature_active_cascading(feature, 11), "{feature:?}");
+            assert!(cfg.is_feature_activation_block_cascading(feature, 10, 9), "{feature:?}");
+            assert!(!cfg.is_feature_activation_block_cascading(feature, 10, 10), "{feature:?}");
+            assert_eq!(cfg.configured_feature_activation_timestamp(feature), Some(10));
 
             cfg.set_upgrade_activation_timestamp(feature.activation_upgrade(), 0);
-            assert!(cfg.is_feature_active_at_timestamp(feature, 0), "{feature:?}");
-            assert!(!cfg.is_feature_activation_block(feature, 0, 0), "{feature:?}");
+            assert!(cfg.is_feature_active_cascading(feature, 0), "{feature:?}");
+            assert!(!cfg.is_feature_activation_block_cascading(feature, 0, 0), "{feature:?}");
         }
     }
 
@@ -647,18 +647,32 @@ mod tests {
 
         // Active-state implication is not timestamp fallback: Delta implies Canyon even though
         // Canyon has an explicit, later timestamp. The configured timestamp remains unchanged.
-        assert!(!cfg.is_feature_active_at_timestamp(BaseFeature::DepositReceiptVersion, 9));
-        assert!(cfg.is_feature_active_at_timestamp(BaseFeature::DepositReceiptVersion, 10));
-        assert!(cfg.is_feature_activation_block(BaseFeature::DepositReceiptVersion, 10, 9));
-        assert_eq!(cfg.feature_activation_timestamp(BaseFeature::DepositReceiptVersion), Some(100));
-        assert!(cfg.is_feature_active_at_timestamp(BaseFeature::DepositNonce, 10));
+        assert!(!cfg.is_feature_active_cascading(BaseFeature::DepositReceiptVersion, 9));
+        assert!(cfg.is_feature_active_cascading(BaseFeature::DepositReceiptVersion, 10));
+        assert!(cfg.is_feature_activation_block_cascading(
+            BaseFeature::DepositReceiptVersion,
+            10,
+            9
+        ));
+        assert_eq!(
+            cfg.configured_feature_activation_timestamp(BaseFeature::DepositReceiptVersion),
+            Some(100)
+        );
+        assert!(cfg.is_feature_active_cascading(BaseFeature::DepositNonce, 10));
+
+        cfg.upgrades.canyon_time = None;
+        assert!(cfg.is_feature_active_cascading(BaseFeature::DepositReceiptVersion, 10));
+        assert_eq!(
+            cfg.configured_feature_activation_timestamp(BaseFeature::DepositReceiptVersion),
+            None
+        );
 
         cfg.upgrades = UpgradeConfig::default();
         cfg.upgrades.base.denim = Some(0);
-        assert!(cfg.is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, 0));
-        assert!(!cfg.is_feature_active_at_timestamp(BaseFeature::DaFootprint, u64::MAX));
-        assert!(!cfg.is_feature_active_at_timestamp(BaseFeature::AssetPrecompileV2, u64::MAX));
-        assert!(!cfg.is_feature_active_at_timestamp(BaseFeature::Keystore, u64::MAX));
+        assert!(cfg.is_feature_active_cascading(BaseFeature::SubsecondBlocks, 0));
+        assert!(!cfg.is_feature_active_cascading(BaseFeature::DaFootprint, u64::MAX));
+        assert!(!cfg.is_feature_active_cascading(BaseFeature::AssetPrecompileV2, u64::MAX));
+        assert!(!cfg.is_feature_active_cascading(BaseFeature::Keystore, u64::MAX));
     }
 
     #[test]
@@ -669,16 +683,16 @@ mod tests {
         cfg.upgrades.base.zenith = Some(20);
         RuntimeUpgradeRegistry::clear_chain(CHAIN_ID);
         RuntimeUpgradeRegistry::clear_activation_timestamp(CHAIN_ID, BaseUpgrade::Denim);
-        assert_eq!(cfg.feature_activation_timestamp(BaseFeature::MillisecondTimestamps), None);
-        assert!(!cfg.is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, u64::MAX));
+        assert_eq!(cfg.configured_feature_activation_timestamp(BaseFeature::SubsecondBlocks), None);
+        assert!(!cfg.is_feature_active_cascading(BaseFeature::SubsecondBlocks, u64::MAX));
 
         RuntimeUpgradeRegistry::set_activation_timestamp(CHAIN_ID, BaseUpgrade::Denim, 30);
-        assert!(!cfg.is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, 29));
-        assert!(cfg.is_feature_activation_block(BaseFeature::MillisecondTimestamps, 30, 29));
+        assert!(!cfg.is_feature_active_cascading(BaseFeature::SubsecondBlocks, 29));
+        assert!(cfg.is_feature_activation_block_cascading(BaseFeature::SubsecondBlocks, 30, 29));
         RuntimeUpgradeRegistry::set_activation_timestamp(CHAIN_ID, BaseUpgrade::Zenith, 0);
-        assert_eq!(cfg.feature_activation_timestamp(BaseFeature::Keystore), Some(20));
-        assert!(!cfg.is_feature_active_at_timestamp(BaseFeature::Keystore, 19));
-        assert!(cfg.is_feature_activation_block(BaseFeature::Keystore, 20, 19));
+        assert_eq!(cfg.configured_feature_activation_timestamp(BaseFeature::Keystore), Some(20));
+        assert!(!cfg.is_feature_active_cascading(BaseFeature::Keystore, 19));
+        assert!(cfg.is_feature_activation_block_cascading(BaseFeature::Keystore, 20, 19));
         RuntimeUpgradeRegistry::clear_chain(CHAIN_ID);
     }
 

@@ -277,8 +277,8 @@ impl SnapshotL2Stack {
             .ok_or_else(|| eyre::eyre!("snapshot boundary block number overflow"))?;
         if block_interval == DevnetBlockInterval::TwoSeconds {
             ensure!(
-                !config.is_feature_active_at_timestamp(
-                    BaseFeature::MillisecondTimestamps,
+                !config.is_feature_active_cascading(
+                    BaseFeature::SubsecondBlocks,
                     config.l2_block_timestamp(boundary_number)
                 ),
                 "two-second snapshot continuation requires a pre-Denim snapshot head"

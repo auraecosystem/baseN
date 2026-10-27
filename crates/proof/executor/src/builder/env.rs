@@ -60,9 +60,7 @@ where
         parent: &Header,
         min_base_fee: u64,
     ) -> Option<u64> {
-        if !self
-            .config
-            .is_feature_active_at_timestamp(BaseFeature::DaAwareBaseFee, parent.timestamp())
+        if !self.config.is_feature_active_cascading(BaseFeature::DaAwareBaseFee, parent.timestamp())
         {
             return parent.next_block_base_fee(params);
         }
@@ -141,14 +139,12 @@ where
             // After Holocene activation, the base fee parameters are stored in the
             // `extraData` field of the parent header. If Holocene wasn't active in the
             // parent block, the default base fee parameters are used.
-            _ if config.is_feature_active_at_timestamp(
-                BaseFeature::MinBaseFee,
-                parent_header.timestamp,
-            ) =>
+            _ if config
+                .is_feature_active_cascading(BaseFeature::MinBaseFee, parent_header.timestamp) =>
             {
                 decode_jovian_eip_1559_params_block_header(parent_header)
             }
-            _ if config.is_feature_active_at_timestamp(
+            _ if config.is_feature_active_cascading(
                 BaseFeature::DynamicBaseFeeParameters,
                 parent_header.timestamp,
             ) =>
@@ -158,7 +154,7 @@ where
             }
             // If the next payload attribute timestamp is past canyon activation,
             // use the canyon base fee params from the rollup config.
-            _ if config.is_feature_active_at_timestamp(
+            _ if config.is_feature_active_cascading(
                 BaseFeature::BaseFeeDenominator,
                 payload_timestamp,
             ) =>

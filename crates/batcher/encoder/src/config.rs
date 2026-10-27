@@ -177,7 +177,7 @@ impl EncoderConfig {
         self.validate()?;
 
         if !rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::BrotliCompression, next_l2_timestamp)
+            .is_feature_active_cascading(BaseFeature::BrotliCompression, next_l2_timestamp)
         {
             return Err(EncoderConfigError::BrotliRequiresFjord { next_l2_timestamp });
         }

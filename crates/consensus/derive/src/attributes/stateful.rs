@@ -133,10 +133,8 @@ where
             let (updates, errors) = sys_config.update_with_receipts(
                 &receipts,
                 self.rollup_cfg.l1_system_config_address,
-                self.rollup_cfg.is_feature_active_at_timestamp(
-                    BaseFeature::BlobFeeScalarUpdates,
-                    header.timestamp,
-                ),
+                self.rollup_cfg
+                    .is_feature_active_cascading(BaseFeature::BlobAwareL1Fees, header.timestamp),
             );
             for kind in &updates {
                 info!(target: "attributes", epoch = epoch.number, %kind, "Applied system config update");
@@ -173,8 +171,8 @@ where
             ));
         }
 
-        if self.rollup_cfg.is_feature_activation_block(
-            BaseFeature::GasParameterScaling,
+        if self.rollup_cfg.is_feature_activation_block_cascading(
+            BaseFeature::SubsecondBlocks,
             target_l2_time,
             l2_parent.block_info.timestamp,
         ) {
@@ -187,28 +185,28 @@ where
         }
 
         let mut upgrade_transactions: Vec<Bytes> = vec![];
-        if self.rollup_cfg.is_feature_activation_block(
+        if self.rollup_cfg.is_feature_activation_block_cascading(
             BaseFeature::EcotoneUpgradeTransactions,
             target_l2_time,
             l2_parent.block_info.timestamp,
         ) {
             upgrade_transactions.extend(Upgrades::ECOTONE.txs());
         }
-        if self.rollup_cfg.is_feature_activation_block(
+        if self.rollup_cfg.is_feature_activation_block_cascading(
             BaseFeature::FjordUpgradeTransactions,
             target_l2_time,
             l2_parent.block_info.timestamp,
         ) {
             upgrade_transactions.extend(Upgrades::FJORD.txs());
         }
-        if self.rollup_cfg.is_feature_activation_block(
+        if self.rollup_cfg.is_feature_activation_block_cascading(
             BaseFeature::IsthmusUpgradeTransactions,
             target_l2_time,
             l2_parent.block_info.timestamp,
         ) {
             upgrade_transactions.extend(Upgrades::ISTHMUS.txs());
         }
-        if self.rollup_cfg.is_feature_activation_block(
+        if self.rollup_cfg.is_feature_activation_block_cascading(
             BaseFeature::JovianUpgradeTransactions,
             target_l2_time,
             l2_parent.block_info.timestamp,
@@ -234,7 +232,7 @@ where
 
         let base_time_active = self
             .rollup_cfg
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, target_l2_time);
+            .is_feature_active_cascading(BaseFeature::SubsecondBlocks, target_l2_time);
         let mut txs = Vec::with_capacity(
             1 + usize::from(base_time_active)
                 + deposit_transactions.len()
@@ -258,14 +256,12 @@ where
         txs.extend(upgrade_transactions);
 
         let mut withdrawals = None;
-        if self.rollup_cfg.is_feature_active_at_timestamp(BaseFeature::Withdrawals, target_l2_time)
-        {
+        if self.rollup_cfg.is_feature_active_cascading(BaseFeature::Withdrawals, target_l2_time) {
             withdrawals = Some(Vec::default());
         }
 
         let mut parent_beacon_root = None;
-        if self.rollup_cfg.is_feature_active_at_timestamp(BaseFeature::BeaconRoots, target_l2_time)
-        {
+        if self.rollup_cfg.is_feature_active_cascading(BaseFeature::BeaconRoots, target_l2_time) {
             // if the parent beacon root is not available, default to zero hash
             parent_beacon_root = Some(l1_header.parent_beacon_block_root.unwrap_or_default());
         }
@@ -292,7 +288,7 @@ where
             ),
             min_base_fee: self
                 .rollup_cfg
-                .is_feature_active_at_timestamp(BaseFeature::MinBaseFee, target_l2_time)
+                .is_feature_active_cascading(BaseFeature::MinBaseFee, target_l2_time)
                 .then(|| sys_config.min_base_fee.unwrap_or_default()), /* Default to zero if not
                                                                         * set at Jovian */
         })

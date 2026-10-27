@@ -932,7 +932,7 @@ fn payload_attributes_from_l2_block(
     payload_attributes.no_tx_pool = Some(true);
     payload_attributes.gas_limit = Some(block.header.inner.gas_limit);
 
-    if cfg.prover.rollup_config.is_feature_active_at_timestamp(BaseFeature::MinBaseFee, timestamp) {
+    if cfg.prover.rollup_config.is_feature_active_cascading(BaseFeature::MinBaseFee, timestamp) {
         let (elasticity, denominator, min_base_fee) =
             JovianExtraData::decode(&block.header.inner.extra_data)
                 .map_err(|err| HostError::Custom(err.to_string()))?;
@@ -942,7 +942,7 @@ fn payload_attributes_from_l2_block(
     } else if cfg
         .prover
         .rollup_config
-        .is_feature_active_at_timestamp(BaseFeature::DynamicBaseFeeParameters, timestamp)
+        .is_feature_active_cascading(BaseFeature::DynamicBaseFeeParameters, timestamp)
     {
         let (elasticity, denominator) = HoloceneExtraData::decode(&block.header.inner.extra_data)
             .map_err(|err| HostError::Custom(err.to_string()))?;

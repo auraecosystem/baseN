@@ -88,8 +88,7 @@ impl BaseTime {
         evm: &mut Evm<'_, BaseEvmTypes>,
         block_state: &mut BlockStateAccumulator,
     ) -> HandlerResult<()> {
-        if !chain_spec.is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
-        {
+        if !chain_spec.is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, timestamp) {
             return Ok(());
         }
 

@@ -61,8 +61,8 @@ where
         if let Some(prev) = self.prev.take() {
             // On the first call to `attempt_update`, we need to determine the active stage to
             // initialize the mux with.
-            if self.cfg.is_feature_active_at_timestamp(
-                BaseFeature::StrictChannelOrdering,
+            if self.cfg.is_feature_active_cascading(
+                BaseFeature::StrictDerivationOrdering,
                 origin.timestamp,
             ) {
                 self.channel_assembler = Some(ChannelAssembler::new(Arc::clone(&self.cfg), prev));
@@ -70,8 +70,8 @@ where
                 self.channel_bank = Some(ChannelBank::new(Arc::clone(&self.cfg), prev));
             }
         } else if self.channel_bank.is_some()
-            && self.cfg.is_feature_active_at_timestamp(
-                BaseFeature::StrictChannelOrdering,
+            && self.cfg.is_feature_active_cascading(
+                BaseFeature::StrictDerivationOrdering,
                 origin.timestamp,
             )
         {
@@ -81,8 +81,8 @@ where
             self.channel_assembler =
                 Some(ChannelAssembler::new(Arc::clone(&self.cfg), channel_bank.prev));
         } else if self.channel_assembler.is_some()
-            && !self.cfg.is_feature_active_at_timestamp(
-                BaseFeature::StrictChannelOrdering,
+            && !self.cfg.is_feature_active_cascading(
+                BaseFeature::StrictDerivationOrdering,
                 origin.timestamp,
             )
         {

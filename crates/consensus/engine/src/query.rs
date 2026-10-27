@@ -102,7 +102,7 @@ impl EngineQueries {
 
                 let state_root = output_block.header.state_root;
 
-                let message_passer_storage_root = if rollup_config.is_feature_active_at_timestamp(
+                let message_passer_storage_root = if rollup_config.is_feature_active_cascading(
                     BaseFeature::L2ToL1MessageRoot,
                     output_block.header.timestamp,
                 ) {

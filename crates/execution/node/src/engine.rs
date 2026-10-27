@@ -174,7 +174,7 @@ where
 
         if !self
             .chain_spec()
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
+            .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, timestamp)
         {
             return Ok(());
         }
@@ -184,10 +184,10 @@ where
                 .map_err(ConsensusError::other)?
                 .timestamp_millis_part();
 
-        if !self.chain_spec().is_feature_active_at_timestamp(
-            BaseFeature::MillisecondTimestamps,
-            parent_header.timestamp(),
-        ) {
+        if !self
+            .chain_spec()
+            .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, parent_header.timestamp())
+        {
             // The legacy parent has no millisecond component to anchor the 200ms progression
             // check, so the activation block must claim exactly 0 instead.
             if child_millis != 0 {
@@ -238,7 +238,7 @@ where
         let timestamp = attributes.timestamp();
         if !self
             .chain_spec()
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
+            .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, timestamp)
         {
             return (timestamp > header.timestamp())
                 .then_some(())

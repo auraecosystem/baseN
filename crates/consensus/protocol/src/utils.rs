@@ -120,20 +120,20 @@ fn system_config_from_transaction(
     };
 
     // After holocene's activation, the EIP-1559 parameters are stored in the block header's nonce.
-    if rollup_config.is_feature_active_at_timestamp(BaseFeature::MinBaseFee, timestamp) {
+    if rollup_config.is_feature_active_cascading(BaseFeature::MinBaseFee, timestamp) {
         let (elasticity, denominator, min_base_fee) = JovianExtraData::decode(extra_data)?;
         cfg.eip1559_denominator = Some(denominator);
         cfg.eip1559_elasticity = Some(elasticity);
         cfg.min_base_fee = Some(min_base_fee);
     } else if rollup_config
-        .is_feature_active_at_timestamp(BaseFeature::DynamicBaseFeeParameters, timestamp)
+        .is_feature_active_cascading(BaseFeature::DynamicBaseFeeParameters, timestamp)
     {
         let (elasticity, denominator) = HoloceneExtraData::decode(extra_data)?;
         cfg.eip1559_denominator = Some(denominator);
         cfg.eip1559_elasticity = Some(elasticity);
     }
 
-    if rollup_config.is_feature_active_at_timestamp(BaseFeature::OperatorFee, timestamp) {
+    if rollup_config.is_feature_active_cascading(BaseFeature::OperatorFee, timestamp) {
         cfg.operator_fee_scalar = Some(l1_info.operator_fee_scalar());
         cfg.operator_fee_constant = Some(l1_info.operator_fee_constant());
     }

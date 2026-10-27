@@ -78,7 +78,7 @@ impl<EngineClient_: EngineClient> SealTask<EngineClient_> {
                 return Err(SealTaskError::DepositOnlyPayloadFailed);
             }
             Err(InsertTaskError::UnexpectedPayloadStatus(e))
-                if self.cfg.is_feature_active_at_timestamp(
+                if self.cfg.is_feature_active_cascading(
                     BaseFeature::DepositsOnlyOnInvalidPayload,
                     self.attributes.attributes().payload_attributes.timestamp,
                 ) =>

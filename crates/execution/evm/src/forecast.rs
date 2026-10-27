@@ -98,8 +98,7 @@ impl BasePendingForecast {
         db: DB,
         mut overrides: EvmOverrides,
     ) -> Result<EvmOverrides, BaseTimeTransitionError<EvmDatabaseError<DB::Error>>> {
-        if !chain_spec
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, self.timestamp)
+        if !chain_spec.is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, self.timestamp)
         {
             return Ok(overrides);
         }

@@ -291,7 +291,7 @@ mod tests {
             (BaseFeature::OperatorFee, BaseUpgrade::Isthmus),
             (BaseFeature::DaFootprint, BaseUpgrade::Jovian),
             (BaseFeature::DynamicStorageTailCleanup, BaseUpgrade::Cobalt),
-            (BaseFeature::MillisecondTimestamps, BaseUpgrade::Denim),
+            (BaseFeature::SubsecondBlocks, BaseUpgrade::Denim),
             (BaseFeature::Eip8130, BaseUpgrade::Everest),
             (BaseFeature::Keystore, BaseUpgrade::Zenith),
         ];

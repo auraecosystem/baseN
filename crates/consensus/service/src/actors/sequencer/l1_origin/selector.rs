@@ -163,9 +163,7 @@ impl<P: L1OriginSelectorProvider> L1OriginSelector<P> {
 
         // Denim permits only one L1 origin per whole second. Keep the parent's origin until the
         // next L2 timestamp advances, even when a successor is ready or sequencer drift expired.
-        if self
-            .cfg
-            .is_feature_active_at_timestamp(BaseFeature::SameSecondL1Origin, next_l2_timestamp)
+        if self.cfg.is_feature_active_cascading(BaseFeature::SubsecondBlocks, next_l2_timestamp)
             && next_l2_timestamp == unsafe_head.block_info.timestamp
         {
             return Ok(current.clone());

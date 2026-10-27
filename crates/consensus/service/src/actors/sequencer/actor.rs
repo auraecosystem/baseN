@@ -366,8 +366,8 @@ where
         last_seal_duration: Duration,
     ) -> SystemTime {
         let target = self.block_deadline(block_number);
-        if self.rollup_config.is_feature_active_at_timestamp(
-            BaseFeature::MillisecondTimestamps,
+        if self.rollup_config.is_feature_active_cascading(
+            BaseFeature::SubsecondBlocks,
             self.rollup_config.l2_block_timestamp(block_number),
         ) {
             let interval =

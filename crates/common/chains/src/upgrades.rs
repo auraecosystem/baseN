@@ -180,26 +180,78 @@ impl Upgrades for RollupConfig {
 
 #[cfg(test)]
 mod tests {
+    use alloc::sync::Arc;
+
     use super::*;
     use crate::{BaseUpgradeExt, ChainUpgrades};
 
     #[test]
     fn feature_gates_use_resolved_conditions_not_rollup_active_state_cascade() {
+        fn execution_state<C: Upgrades>(
+            cfg: C,
+            feature: BaseFeature,
+            timestamp: u64,
+            parent_timestamp: u64,
+        ) -> (bool, bool, Option<u64>) {
+            (
+                cfg.is_feature_active_at_timestamp(feature, timestamp),
+                cfg.is_feature_activation_block(feature, timestamp, parent_timestamp),
+                cfg.feature_activation_timestamp(feature),
+            )
+        }
+
         let mut cfg = RollupConfig::default();
-        cfg.upgrades.canyon_time = Some(100);
         cfg.upgrades.ecotone_time = Some(10);
         let feature = BaseFeature::DepositReceiptVersion;
 
-        // Trait consumers preserve the explicit Canyon timestamp; inherent rollup consumers
-        // preserve the older active-state cascade, which Ecotone already satisfies.
-        assert!(!Upgrades::is_feature_active_at_timestamp(&cfg, feature, 10));
-        assert!(cfg.is_feature_active_at_timestamp(feature, 10));
-        assert_eq!(Upgrades::feature_activation_timestamp(&cfg, feature), Some(100));
-        assert!(Upgrades::is_feature_activation_block(&cfg, feature, 100, 99));
+        // Execution preserves an explicit later timestamp, falling back only when absent.
+        // Rollup active-state cascading instead activates Canyon with Ecotone in both cases.
+        for (configured, resolved) in [(Some(100), 100), (None, 10)] {
+            cfg.upgrades.canyon_time = configured;
+            let shared = Arc::new(cfg.clone());
 
-        cfg.upgrades.canyon_time = None;
-        assert_eq!(Upgrades::feature_activation_timestamp(&cfg, feature), Some(10));
-        assert!(Upgrades::is_feature_active_at_timestamp(&cfg, feature, 10));
+            assert_eq!(cfg.configured_feature_activation_timestamp(feature), configured);
+            assert_eq!(shared.configured_feature_activation_timestamp(feature), configured);
+            assert_eq!(cfg.feature_activation_timestamp(feature), Some(resolved));
+            assert_eq!(shared.feature_activation_timestamp(feature), Some(resolved));
+
+            for (timestamp, parent_timestamp) in [(9, 8), (10, 8), (11, 10), (100, 99), (101, 100)]
+            {
+                let active = timestamp >= resolved;
+                let transition = active && parent_timestamp < resolved;
+                let expected = (active, transition, Some(resolved));
+                assert_eq!(execution_state(&cfg, feature, timestamp, parent_timestamp), expected);
+                assert_eq!(
+                    execution_state(Arc::clone(&shared), feature, timestamp, parent_timestamp),
+                    expected
+                );
+                assert_eq!(cfg.is_feature_active_at_timestamp(feature, timestamp), active);
+                assert_eq!(shared.is_feature_active_at_timestamp(feature, timestamp), active);
+                assert_eq!(
+                    cfg.is_feature_activation_block(feature, timestamp, parent_timestamp),
+                    transition
+                );
+                assert_eq!(
+                    shared.is_feature_activation_block(feature, timestamp, parent_timestamp),
+                    transition
+                );
+
+                assert_eq!(cfg.is_feature_active_cascading(feature, timestamp), timestamp >= 10);
+                assert_eq!(shared.is_feature_active_cascading(feature, timestamp), timestamp >= 10);
+                assert_eq!(
+                    cfg.is_feature_activation_block_cascading(feature, timestamp, parent_timestamp),
+                    timestamp >= 10 && parent_timestamp < 10
+                );
+                assert_eq!(
+                    shared.is_feature_activation_block_cascading(
+                        feature,
+                        timestamp,
+                        parent_timestamp
+                    ),
+                    timestamp >= 10 && parent_timestamp < 10
+                );
+            }
+        }
     }
 
     #[test]

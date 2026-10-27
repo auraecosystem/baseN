@@ -379,8 +379,7 @@ where
     const LEGACY_BLOCK_TIME: u64 = 2;
     const DENIM_BLOCK_TIME_MS: u64 = 200;
 
-    let denim_timestamp =
-        chain_spec.feature_activation_timestamp(BaseFeature::MillisecondTimestamps);
+    let denim_timestamp = chain_spec.feature_activation_timestamp(BaseFeature::SubsecondBlocks);
     let activation_block = denim_timestamp.map(|timestamp| {
         genesis_number
             .saturating_add(timestamp.saturating_sub(genesis_timestamp).div_ceil(LEGACY_BLOCK_TIME))
@@ -410,7 +409,7 @@ where
             Some(scheduled)
         } else if denim_timestamp.is_some()
             && chain_spec
-                .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, prev_timestamp)
+                .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, prev_timestamp)
         {
             Some(prev_timestamp)
         } else {
@@ -471,11 +470,9 @@ where
         let block_time = if let Some(timestamp) = overrides.time {
             let allows_same_timestamp = denim_timestamp.is_some()
                 && chain_spec
-                    .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
-                && chain_spec.is_feature_active_at_timestamp(
-                    BaseFeature::MillisecondTimestamps,
-                    prev_timestamp,
-                );
+                    .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, timestamp)
+                && chain_spec
+                    .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, prev_timestamp);
             if timestamp < prev_timestamp || (timestamp == prev_timestamp && !allows_same_timestamp)
             {
                 return Err(EthApiError::other(EthSimulateError::BlockTimestampInvalid {

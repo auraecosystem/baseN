@@ -60,7 +60,7 @@ impl AttributesMatch {
         let attr_withdrawals = attr_withdrawals.map(|w| Withdrawals::new(w.clone()));
         let block_withdrawals = block.withdrawals.as_ref();
 
-        if config.is_feature_active_at_timestamp(BaseFeature::Withdrawals, block.header.timestamp) {
+        if config.is_feature_active_cascading(BaseFeature::Withdrawals, block.header.timestamp) {
             // In canyon, the withdrawals list should be some and empty
             if attr_withdrawals.is_none_or(|w| !w.is_empty()) {
                 return Self::Mismatch(AttributesMismatch::CanyonWithdrawalsNotEmpty);
@@ -68,10 +68,9 @@ impl AttributesMatch {
             if block_withdrawals.is_none_or(|w| !w.is_empty()) {
                 return Self::Mismatch(AttributesMismatch::CanyonWithdrawalsNotEmpty);
             }
-            if !config.is_feature_active_at_timestamp(
-                BaseFeature::L2ToL1MessageRoot,
-                block.header.timestamp,
-            ) {
+            if !config
+                .is_feature_active_cascading(BaseFeature::L2ToL1MessageRoot, block.header.timestamp)
+            {
                 // In canyon, the withdrawals root should be set to the empty value
                 let empty_hash = alloy_consensus::EMPTY_ROOT_HASH;
                 if block.header.inner.withdrawals_root != Some(empty_hash) {
@@ -86,7 +85,7 @@ impl AttributesMatch {
         }
 
         if config
-            .is_feature_active_at_timestamp(BaseFeature::L2ToL1MessageRoot, block.header.timestamp)
+            .is_feature_active_cascading(BaseFeature::L2ToL1MessageRoot, block.header.timestamp)
         {
             // In isthmus, the withdrawals root must be set
             if block.header.inner.withdrawals_root.is_none() {
@@ -186,7 +185,7 @@ impl AttributesMatch {
                 // Holocene is active but the eip1559 are not set. This is a bug!
                 // Note: we checked the timestamp match above, so we can assume that both the
                 // attributes and the block have the same stamps
-                if config.is_feature_active_at_timestamp(
+                if config.is_feature_active_cascading(
                     BaseFeature::DynamicBaseFeeParameters,
                     block.header.timestamp,
                 ) {
@@ -220,11 +219,11 @@ impl AttributesMatch {
         // The Jovian extra_data carries an additional `min_base_fee`. The `Option` doubles as
         // a fork signal: `Some` iff Jovian is active.
         let extra_data_decoded: Result<(u32, u32, Option<u64>), EIP1559ParamError> = if config
-            .is_feature_active_at_timestamp(BaseFeature::MinBaseFee, block.header.timestamp)
+            .is_feature_active_cascading(BaseFeature::MinBaseFee, block.header.timestamp)
         {
             JovianExtraData::decode(&block.header.extra_data)
                 .map(|(be, bd, mbf)| (be, bd, Some(mbf)))
-        } else if config.is_feature_active_at_timestamp(
+        } else if config.is_feature_active_cascading(
             BaseFeature::DynamicBaseFeeParameters,
             block.header.timestamp,
         ) {

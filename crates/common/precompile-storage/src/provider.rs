@@ -168,7 +168,7 @@ pub trait StorageOps {
 /// Resolved native precompile storage behaviors, independent of the chain's schedule.
 ///
 /// `Legacy` and `Cobalt` retain the historical profile names for callers and fixtures.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum StorageFeatures {
     /// Preserve precompile behavior from before Cobalt activation.
     #[default]

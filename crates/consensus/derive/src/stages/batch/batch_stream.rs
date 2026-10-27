@@ -70,7 +70,7 @@ where
         let origin = self.prev.origin().ok_or(PipelineError::MissingOrigin.crit())?;
         Ok(self
             .config
-            .is_feature_active_at_timestamp(BaseFeature::StrictBatchOrdering, origin.timestamp))
+            .is_feature_active_cascading(BaseFeature::StrictDerivationOrdering, origin.timestamp))
     }
 
     /// Gets a span-derived [`SingleBatch`] from the in-memory buffer and assigns its parent hash.
@@ -138,7 +138,7 @@ where
         }
 
         let next = parent.block_info.number + 1;
-        if self.config.is_feature_active_at_timestamp(
+        if self.config.is_feature_active_cascading(
             BaseFeature::SingularBatchesOnly,
             self.config.l2_block_timestamp(next),
         ) && (self.span.is_some() || !self.buffer.is_empty())

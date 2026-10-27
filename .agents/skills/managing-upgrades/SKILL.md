@@ -11,13 +11,17 @@ Keep Base protocol features, their hardfork activations, and cross-stack documen
    [BaseFeature](../../../crates/common/genesis/src/feature.rs). Trace their consumers
    before editing. Distinguish Ethereum spec checks from Base protocol behavior.
 2. Gate behavior using a semantic `BaseFeature`. Reuse an existing feature only for
-   the same rule, not merely the same activation date. The Rust registry owns each
-   feature-to-upgrade mapping; no second mapping belongs in consumers or docs.
-3. Preserve the consumer's activation adapter: rollup cascade, execution fork
-   conditions, or resolved EVM spec. Use the actual parent timestamp for transition
-   checks. Keep genesis activation, first-block layout exceptions, runtime `Never`,
-   schedule rescheduling, and historical proof pinning intact. Never add mutable
-   per-node switches for consensus rules.
+   the same protocol change, including its input parameters and transition work,
+   not merely the same activation date. Do not split a cohesive rule into one
+   feature per implementation layer. The Rust registry owns each feature-to-upgrade
+   mapping; no second mapping belongs in consumers or docs.
+3. Preserve the consumer's activation adapter: rollup `is_feature_active_cascading`,
+   execution `is_feature_active_at_timestamp`, or resolved EVM spec. For boundaries,
+   distinguish the rollup's `configured_feature_activation_timestamp` from the
+   execution trait's resolved timestamp. Use the actual parent timestamp for
+   transition checks. Keep genesis activation, first-block layout exceptions,
+   runtime `Never`, schedule rescheduling, and historical proof pinning intact.
+   Never add mutable per-node switches for consensus rules.
 4. Check all applicable paths: batcher/derivation, sequencer/builder, validation and
    re-execution, RPC/txpool, and proof execution. Preserve pre-fork behavior. For a
    new upgrade follow the guide's enum/config/contract-order checklist. Keep

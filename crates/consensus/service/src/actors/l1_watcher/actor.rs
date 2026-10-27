@@ -301,7 +301,7 @@ where
                             return Ok(());
                         };
                         let ecotone_active =
-                            self.rollup_config.is_feature_active_at_timestamp(BaseFeature::BlobFeeScalarUpdates, derivation_block.timestamp);
+                            self.rollup_config.is_feature_active_cascading(BaseFeature::BlobAwareL1Fees, derivation_block.timestamp);
                         for log in logs {
                             let sys_cfg_log = SystemConfigLog::new(log.into(), ecotone_active);
                             if let Ok(SystemConfigUpdate::UnsafeBlockSigner(UnsafeBlockSignerUpdate { unsafe_block_signer })) = sys_cfg_log.build() {

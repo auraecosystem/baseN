@@ -104,8 +104,7 @@ impl BaseTime {
     where
         DB: Database + DatabaseCommit,
     {
-        if !chain_spec.is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
-        {
+        if !chain_spec.is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, timestamp) {
             return Ok(());
         }
 

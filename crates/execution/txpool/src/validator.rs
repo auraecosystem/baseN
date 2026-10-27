@@ -937,7 +937,7 @@ where
         let timestamp = header.timestamp();
         let timestamp_ms = self
             .chain_spec()
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
+            .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, timestamp)
             .then(|| BaseTimeUpdateTx::decode_timestamp_ms(transactions, timestamp))
             .flatten()
             .unwrap_or_else(|| timestamp.saturating_mul(1_000));

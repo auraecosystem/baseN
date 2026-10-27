@@ -94,7 +94,7 @@ where
 
                 // If we are in interop mode, this error must be handled by the caller.
                 // Otherwise, we continue the loop to halt derivation on the next iteration.
-                if cfg.is_feature_active_at_timestamp(
+                if cfg.is_feature_active_cascading(
                     BaseFeature::StrictProofSourceExhaustion,
                     tip_cursor.l2_safe_head.block_info.timestamp,
                 ) {
@@ -119,7 +119,7 @@ where
             Err(e) => {
                 error!(target: "client", error = %e, "Failed to execute L2 block");
 
-                if !cfg.is_feature_active_at_timestamp(
+                if !cfg.is_feature_active_cascading(
                     BaseFeature::DepositsOnlyOnInvalidPayload,
                     attributes.payload_attributes.timestamp,
                 ) {

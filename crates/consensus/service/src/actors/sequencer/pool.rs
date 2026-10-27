@@ -64,7 +64,11 @@ impl PoolActivation {
         ]
         .into_iter()
         .any(|feature| {
-            self.rollup_config.is_feature_activation_block(feature, timestamp, parent_timestamp)
+            self.rollup_config.is_feature_activation_block_cascading(
+                feature,
+                timestamp,
+                parent_timestamp,
+            )
         })
     }
 }

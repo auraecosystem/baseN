@@ -32,7 +32,7 @@ impl EngineForkchoiceVersion {
     ///
     /// Uses the [`RollupConfig`] to check which upgrade is active at the given timestamp.
     pub fn from_cfg(cfg: &RollupConfig, timestamp: u64) -> Self {
-        if cfg.is_feature_active_at_timestamp(BaseFeature::EngineApiV3, timestamp) {
+        if cfg.is_feature_active_cascading(BaseFeature::EngineApiV3, timestamp) {
             // Cancun+
             Self::V3
         } else {
@@ -63,9 +63,9 @@ impl EngineNewPayloadVersion {
     ///
     /// Uses the [`RollupConfig`] to check which upgrade is active at the given timestamp.
     pub fn from_cfg(cfg: &RollupConfig, timestamp: u64) -> Self {
-        if cfg.is_feature_active_at_timestamp(BaseFeature::EngineApiV4, timestamp) {
+        if cfg.is_feature_active_cascading(BaseFeature::EngineApiV4, timestamp) {
             Self::V4
-        } else if cfg.is_feature_active_at_timestamp(BaseFeature::EngineApiV3, timestamp) {
+        } else if cfg.is_feature_active_cascading(BaseFeature::EngineApiV3, timestamp) {
             // Cancun
             Self::V3
         } else {
@@ -95,11 +95,11 @@ impl EngineGetPayloadVersion {
     ///
     /// Uses the [`RollupConfig`] to check which upgrade is active at the given timestamp.
     pub fn from_cfg(cfg: &RollupConfig, timestamp: u64) -> Self {
-        if cfg.is_feature_active_at_timestamp(BaseFeature::EngineApiV5, timestamp) {
+        if cfg.is_feature_active_cascading(BaseFeature::EngineApiV5, timestamp) {
             Self::V5
-        } else if cfg.is_feature_active_at_timestamp(BaseFeature::EngineApiV4, timestamp) {
+        } else if cfg.is_feature_active_cascading(BaseFeature::EngineApiV4, timestamp) {
             Self::V4
-        } else if cfg.is_feature_active_at_timestamp(BaseFeature::EngineApiV3, timestamp) {
+        } else if cfg.is_feature_active_cascading(BaseFeature::EngineApiV3, timestamp) {
             // Cancun
             Self::V3
         } else {

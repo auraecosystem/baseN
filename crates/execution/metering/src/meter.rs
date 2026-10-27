@@ -63,7 +63,7 @@ fn next_block_schedule(
 
     let (timestamp, timestamp_millis_part) = rollup_config.l2_block_timestamp_parts(block_number);
     let base_time = rollup_config
-        .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
+        .is_feature_active_cascading(BaseFeature::SubsecondBlocks, timestamp)
         .then(|| BaseTimeUpdateTx::new(timestamp_millis_part))
         .transpose()
         .map_err(|error| eyre!("invalid canonical BaseTime update: {error}"))?;

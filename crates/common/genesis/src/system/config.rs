@@ -161,13 +161,13 @@ impl SystemConfig {
         next_timestamp: u64,
     ) -> Option<B64> {
         let dynamic_params = rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::DynamicBaseFeeParameters, next_timestamp);
+            .is_feature_active_cascading(BaseFeature::DynamicBaseFeeParameters, next_timestamp);
 
         // For the first holocene block, a zero'd out B64 is returned to signal the
         // execution layer to use the canyon base fee parameters. Else, the system
         // config's eip1559 parameters are encoded as a B64.
         if dynamic_params
-            && !rollup_config.is_feature_active_at_timestamp(
+            && !rollup_config.is_feature_active_cascading(
                 BaseFeature::DynamicBaseFeeParameters,
                 parent_timestamp,
             )

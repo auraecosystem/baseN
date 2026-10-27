@@ -47,10 +47,10 @@ features! {
     GossipPayloadV2 => Canyon,
     /// Permit span batches in derivation.
     SpanBatches => Delta,
-    /// Price L1 data with separate calldata and blob fee scalars.
+    /// Price L1 data with separate calldata and blob fee scalars, encode compact blob-aware L1
+    /// attributes after the transition block, and validate blob-aware system config scalars
+    /// while ignoring legacy overhead.
     BlobAwareL1Fees => Ecotone,
-    /// Encode the compact blob-aware L1 attributes deposit after the transition block.
-    L1BlockInfoEcotone => Ecotone,
     /// Include blob gas fields in L2 headers, initially with zero values.
     BlobHeader => Ecotone,
     /// Include the parent beacon block root and apply the beacon-roots system call.
@@ -59,8 +59,6 @@ features! {
     ConstantBlobBaseFee => Ecotone,
     /// Read blob batch data after the explicitly configured L1 timestamp boundary.
     BlobDataSource => Ecotone,
-    /// Validate blob-aware fee scalars and ignore legacy overhead in system config updates.
-    BlobFeeScalarUpdates => Ecotone,
     /// Use the blob-capable V3 Engine API payload methods.
     EngineApiV3 => Ecotone,
     /// Inject the Ecotone contract-upgrade deposit bundle at the transition.
@@ -89,24 +87,18 @@ features! {
     GraniteTransitionNoTxPool => Granite,
     /// Read dynamic EIP-1559 parameters from the block header extra data.
     DynamicBaseFeeParameters => Holocene,
-    /// Apply strict batch ordering and revised invalid-batch handling.
-    StrictBatchOrdering => Holocene,
-    /// Assemble one channel at a time instead of using the legacy channel bank.
-    StrictChannelOrdering => Holocene,
-    /// Drop frames that violate channel and frame ordering.
-    StrictFrameOrdering => Holocene,
-    /// Reset the derivation pipeline when crossing into strict ordering.
-    DerivationPipelineReset => Holocene,
+    /// Apply strict batch ordering and revised invalid-batch handling, assemble one channel at
+    /// a time, drop out-of-order frames, and reset the pipeline when crossing into these rules.
+    StrictDerivationOrdering => Holocene,
     /// Retry invalid execution payloads as deposits-only payloads.
     DepositsOnlyOnInvalidPayload => Holocene,
     /// Exclude transaction-pool transactions from the Holocene transition block.
     HoloceneTransitionNoTxPool => Holocene,
     /// Apply the optional L1 Pectra blob schedule correction.
     BlobScheduleCorrection => PectraBlobSchedule,
-    /// Charge the operator fee in addition to execution and L1 data fees.
+    /// Charge the operator fee in addition to execution and L1 data fees, and include its fields
+    /// in the L1 attributes deposit after the transition block.
     OperatorFee => Isthmus,
-    /// Include operator fee fields in the L1 attributes deposit after the transition block.
-    L1BlockInfoIsthmus => Isthmus,
     /// Bound BLS12-381 multi-scalar multiplication and pairing input sizes.
     BlsInputLimits => Isthmus,
     /// Permit EIP-7702 set-code transactions in batches.
@@ -127,12 +119,11 @@ features! {
     StrictProofSourceExhaustion => Isthmus,
     /// Scale the operator fee scalar component by 100 instead of dividing by one million.
     ScaledOperatorFees => Jovian,
-    /// Meter transaction DA footprint against the block budget.
+    /// Meter transaction DA footprint against the block budget, and include the DA footprint
+    /// scalar in L1 attributes after the transition block.
     DaFootprint => Jovian,
     /// Calculate the base fee from the larger of execution gas and DA footprint, with a floor.
     DaAwareBaseFee => Jovian,
-    /// Include the DA footprint scalar in L1 attributes after the transition block.
-    L1BlockInfoJovian => Jovian,
     /// Tighten the bn254 pairing input limit.
     TightBn254PairingInputLimit => Jovian,
     /// Tighten BLS12-381 multi-scalar multiplication and pairing input limits.
@@ -185,16 +176,13 @@ features! {
     StablecoinPrecompileV3 => Denim,
     /// Use the third B20 policy contract implementation.
     PolicyPrecompileV3 => Denim,
-    /// Use deterministic 200ms block timestamps and the Base time predeploy.
-    MillisecondTimestamps => Denim,
+    /// Use deterministic 200ms block timestamps and the Base time predeploy, scale legacy
+    /// whole-second gas parameters, and retain the parent's L1 origin within the same second.
+    SubsecondBlocks => Denim,
     /// Use the extended six-hour sequencer drift bound.
     ExtendedSequencerDrift => Denim,
     /// Build and finalize payloads once instead of replacing them for higher fees.
     OneShotPayloadBuilding => Denim,
-    /// Scale legacy whole-second gas parameters for subsecond blocks.
-    GasParameterScaling => Denim,
-    /// Keep the parent's L1 origin until the L2 timestamp advances to a new whole second.
-    SameSecondL1Origin => Denim,
     /// Reject span batches and encode only singular batches for subsecond blocks.
     SingularBatchesOnly => Denim,
     /// Execute enshrined EIP-8130 account-abstraction transactions.

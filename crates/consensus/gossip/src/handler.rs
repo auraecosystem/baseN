@@ -170,19 +170,16 @@ impl BlockHandler {
     ///
     /// Reference: <https://github.com/ethereum-optimism/optimism/blob/0bc5fe8d16155dc68bcdf1fa5733abc58689a618/op-node/p2p/gossip.go#L604C1-L612C3>
     pub fn topic(&self, timestamp: u64) -> IdentTopic {
-        if self
-            .rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::GossipPayloadV4, timestamp)
-        {
+        if self.rollup_config.is_feature_active_cascading(BaseFeature::GossipPayloadV4, timestamp) {
             self.blocks_v4_topic.clone()
         } else if self
             .rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::GossipPayloadV3, timestamp)
+            .is_feature_active_cascading(BaseFeature::GossipPayloadV3, timestamp)
         {
             self.blocks_v3_topic.clone()
         } else if self
             .rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::GossipPayloadV2, timestamp)
+            .is_feature_active_cascading(BaseFeature::GossipPayloadV2, timestamp)
         {
             self.blocks_v2_topic.clone()
         } else {

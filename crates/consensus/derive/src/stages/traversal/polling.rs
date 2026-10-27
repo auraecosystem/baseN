@@ -128,10 +128,9 @@ impl<F: ChainProvider + Send> OriginAdvancer for PollingTraversal<F> {
             self.data_source.receipts_by_hash(next_l1_origin.hash).await.map_err(Into::into)?;
 
         let l1_system_config_address = self.rollup_config.l1_system_config_address;
-        let ecotone_active = self.rollup_config.is_feature_active_at_timestamp(
-            BaseFeature::BlobFeeScalarUpdates,
-            next_l1_origin.timestamp,
-        );
+        let ecotone_active = self
+            .rollup_config
+            .is_feature_active_cascading(BaseFeature::BlobAwareL1Fees, next_l1_origin.timestamp);
         self.update_system_config_with_receipts(
             &receipts,
             l1_system_config_address,
@@ -139,8 +138,8 @@ impl<F: ChainProvider + Send> OriginAdvancer for PollingTraversal<F> {
             next_l1_origin.number,
         );
 
-        let reset_pipeline = self.rollup_config.is_feature_activation_block(
-            BaseFeature::DerivationPipelineReset,
+        let reset_pipeline = self.rollup_config.is_feature_activation_block_cascading(
+            BaseFeature::StrictDerivationOrdering,
             next_l1_origin.timestamp,
             block.timestamp,
         );

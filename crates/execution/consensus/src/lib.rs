@@ -220,7 +220,7 @@ impl HeaderValidator<Header> for BaseBeaconConsensus {
         if let Some(schedule) =
             self.chain_spec.denim_timestamp_schedule().map_err(ConsensusError::other)?
             && header.number() != schedule.genesis_block_number
-            && schedule.is_denim_active_at_block(header.number())
+            && schedule.is_subsecond_active_at_block(header.number())
         {
             let (expected, _) = schedule.block_timestamp_parts(header.number());
             if header.timestamp() != expected {
@@ -272,11 +272,10 @@ impl HeaderValidator<Header> for BaseBeaconConsensus {
 
         let allows_same_timestamp = self
             .chain_spec
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, header.timestamp())
-            && self.chain_spec.is_feature_active_at_timestamp(
-                BaseFeature::MillisecondTimestamps,
-                parent.timestamp(),
-            );
+            .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, header.timestamp())
+            && self
+                .chain_spec
+                .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, parent.timestamp());
         let timestamp_is_invalid = header.timestamp() < parent.timestamp()
             || (header.timestamp() == parent.timestamp() && !allows_same_timestamp);
         if self

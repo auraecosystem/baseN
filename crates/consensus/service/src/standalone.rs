@@ -104,7 +104,7 @@ impl AttributesBuilder for StandaloneAttributesBuilder {
         // stateful attributes builder.
         if self
             .rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, next_l2_time)
+            .is_feature_active_cascading(BaseFeature::SubsecondBlocks, next_l2_time)
         {
             let base_time =
                 BaseTimeUpdateTx::new(next_l2_timestamp_millis_part).map_err(|error| {
@@ -146,11 +146,11 @@ impl AttributesBuilder for StandaloneAttributesBuilder {
                 suggested_fee_recipient: Predeploys::SEQUENCER_FEE_VAULT,
                 withdrawals: self
                     .rollup_config
-                    .is_feature_active_at_timestamp(BaseFeature::Withdrawals, next_l2_time)
+                    .is_feature_active_cascading(BaseFeature::Withdrawals, next_l2_time)
                     .then(Vec::new),
                 parent_beacon_block_root: self
                     .rollup_config
-                    .is_feature_active_at_timestamp(BaseFeature::BeaconRoots, next_l2_time)
+                    .is_feature_active_cascading(BaseFeature::BeaconRoots, next_l2_time)
                     .then_some(B256::ZERO),
                 slot_number: None,
                 target_gas_limit: None,
@@ -165,7 +165,7 @@ impl AttributesBuilder for StandaloneAttributesBuilder {
             ),
             min_base_fee: self
                 .rollup_config
-                .is_feature_active_at_timestamp(BaseFeature::MinBaseFee, next_l2_time)
+                .is_feature_active_cascading(BaseFeature::MinBaseFee, next_l2_time)
                 .then(|| self.system_config.min_base_fee.unwrap_or_default()),
         })
     }
@@ -202,7 +202,7 @@ impl StandaloneDenimSchedule {
         }
         let mut system_config = head.system_config;
         if rollup_config
-            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, head_info.timestamp)
+            .is_feature_active_cascading(BaseFeature::SubsecondBlocks, head_info.timestamp)
         {
             return Ok(Self { rollup_config, system_config });
         }
