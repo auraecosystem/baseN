@@ -34,6 +34,13 @@ share a feature; callers still retain their different timestamp sources and
 first-block format exceptions. Independent rules stay separate even when they
 activate together.
 
+Runtime schedules can change between reads. Preserve captured boundaries, shared
+decisions, query order, and short-circuiting when migrating a gate. Where one old
+decision controls several features, `BaseFeature::activation_states` evaluates
+their shared upgrade once using the caller's activation adapter. It does not make
+different upgrades atomic and must not combine historically separate reads.
+RPC simulation retains one captured boundary for the whole sanitization pass.
+
 The L1 blob data source intentionally captures its configured feature boundary at
 construction; it does not follow subsequent runtime overrides or rollup cascades.
 Its boundary is an L1 timestamp, not an L2
@@ -130,7 +137,7 @@ attributes, and L1 data fees. It is block-activated rather than timestamp-activa
 The [fork mapping](../../crates/common/chains/src/upgrade.rs) pairs its execution
 rules with Ethereum Merge; later sections describe departures from this baseline.
 
-<!-- REVIEW:Bedrock:39b4976e12cbcc2b -->
+<!-- REVIEW:Bedrock:99e1409ec8a647d0 -->
 <!-- FEATURES:Bedrock:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -143,7 +150,7 @@ Regolith changes deposit gas accounting, system-transaction handling, receipt
 nonces, and the legacy signature-byte allowance in L1 fee calculation. Receipt and
 gas rules must agree between block builders, re-execution, and proof execution.
 
-<!-- REVIEW:Regolith:38b586499a2ab7fe -->
+<!-- REVIEW:Regolith:fd886049a7d95bb9 -->
 <!-- FEATURES:Regolith:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -158,7 +165,7 @@ Canyon adds versioned deposit receipts and the CREATE2 deployer transition. Empt
 withdrawals fields and changed fee parameters accompany Ethereum Shanghai support.
 Receipt-root compatibility retains the historical Regolith-era encoding distinction.
 
-<!-- REVIEW:Canyon:0c6ead9f2008f812 -->
+<!-- REVIEW:Canyon:95c9420a9ca62aaa -->
 <!-- FEATURES:Canyon:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -176,7 +183,7 @@ Delta permits span batches. It changes batching and derivation, not the EVM spec
 ladder. Derivation must reject span batches before activation rather than merely
 relying on the batcher to choose the correct encoding.
 
-<!-- REVIEW:Delta:a8700781fd8035f7 -->
+<!-- REVIEW:Delta:1f1b50900e0f7224 -->
 <!-- FEATURES:Delta:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -190,7 +197,7 @@ and the blob-capable Engine API/header path alongside Ethereum Cancun. The activ
 block still uses the preceding L1 attributes layout where the existing transition
 rules require it; genesis activation is not an ordinary transition block.
 
-<!-- REVIEW:Ecotone:ddf3b1c13e485933 -->
+<!-- REVIEW:Ecotone:6266db4651721a0e -->
 <!-- FEATURES:Ecotone:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -210,7 +217,7 @@ Fjord adds FastLZ-estimated L1 fees, Brotli channels, larger channel limits, fix
 sequencer drift, and RIP-7212 signature verification. Compression acceptance belongs
 to derivation as well as the batch encoder. Upgrade deposits change onchain contracts.
 
-<!-- REVIEW:Fjord:17ab8d59d7638c4b -->
+<!-- REVIEW:Fjord:e92a905a7461840f -->
 <!-- FEATURES:Fjord:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -229,7 +236,7 @@ Granite limits pairing-precompile input and changes channel resource limits/time
 The derivation queue and EVM precompile checks protect different resources and have
 separate features even though they share an activation upgrade.
 
-<!-- REVIEW:Granite:43704699f83e5a6d -->
+<!-- REVIEW:Granite:23182640f4e01039 -->
 <!-- FEATURES:Granite:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -246,7 +253,7 @@ interpret the same fee parameters, including at the transition.
 `StrictDerivationOrdering` covers the batch, channel, and frame ordering model
 and the pipeline reset that transitions into it; fee parameters remain independent.
 
-<!-- REVIEW:Holocene:735fbbd07747ea59 -->
+<!-- REVIEW:Holocene:f1ed5c9199a3dd71 -->
 <!-- FEATURES:Holocene:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -262,7 +269,7 @@ This optional correction selects the L1 blob fee schedule used to construct L1
 attributes for affected networks. It is independent of the execution fork ladder;
 do not infer it from the highest active Base EVM spec or enable it on every network.
 
-<!-- REVIEW:PectraBlobSchedule:25d7861573a658e0 -->
+<!-- REVIEW:PectraBlobSchedule:5a0c84f593eaf504 -->
 <!-- FEATURES:PectraBlobSchedule:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -278,7 +285,7 @@ validator, and proof paths. BLS precompiles have Base-specific input bounds.
 `OperatorFee` also selects the attributes supplying its parameters, but the new
 attributes format still starts after the transition block.
 
-<!-- REVIEW:Isthmus:e96282eb4c9d01ee -->
+<!-- REVIEW:Isthmus:b42881c2ec8c698b -->
 <!-- FEATURES:Isthmus:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -302,7 +309,7 @@ bounds. DA budgeting affects transaction selection as well as block validation.
 `DaFootprint` also selects the attributes supplying its scalar after the transition
 block. DA-aware base fees and minimum base fees remain separately named rules.
 
-<!-- REVIEW:Jovian:c0ace2adb7154d92 -->
+<!-- REVIEW:Jovian:cdde374725b30325 -->
 <!-- FEATURES:Jovian:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -321,7 +328,7 @@ Azul pairs Base execution with Ethereum Osaka and its transaction gas cap and op
 changes. Base precompiles adopt the updated MODEXP/P256 rules while preserving
 Base-specific bounds. Ethereum-defined rules continue to use Ethereum spec gates.
 
-<!-- REVIEW:Azul:8366968c79e7642f -->
+<!-- REVIEW:Azul:7f1479049c014ec9 -->
 <!-- FEATURES:Azul:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -337,7 +344,7 @@ Beryl adds native token, factory, policy, and activation-registry precompiles.
 These dynamic precompiles are installed separately from the static Ethereum table;
 their contract/storage behavior is part of consensus, not an RPC-only facility.
 
-<!-- REVIEW:Beryl:191e77282032c9c1 -->
+<!-- REVIEW:Beryl:8468766991c4cecf -->
 <!-- FEATURES:Beryl:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -356,7 +363,7 @@ activation-registry authorization/value handling, and adds transaction context a
 nonce-manager precompiles. Existing onchain state must keep its historical behavior
 when replayed under earlier specs.
 
-<!-- REVIEW:Cobalt:16a98e7b031de615 -->
+<!-- REVIEW:Cobalt:77d8503efa3c02bb -->
 <!-- FEATURES:Cobalt:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -382,7 +389,7 @@ blocks advance by 200ms. Never infer the parent by subtracting the old block tim
 and retaining the parent's L1 origin within a whole second. One-shot payload
 building and singular-only batching remain separate features.
 
-<!-- REVIEW:Denim:820b7874d2fb8f1c -->
+<!-- REVIEW:Denim:93d6fcab179be06d -->
 <!-- FEATURES:Denim:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -401,7 +408,7 @@ Everest adds enshrined EIP-8130 account-abstraction transactions and native nonc
 manager deployment. Transaction validation, pool admission, execution, and related
 RPC methods must agree on feature activation; RPC visibility alone is not enforcement.
 
-<!-- REVIEW:Everest:19bec84ef6c1c408 -->
+<!-- REVIEW:Everest:6644dccde872f64a -->
 <!-- FEATURES:Everest:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
@@ -417,7 +424,7 @@ not an L1-contract-backed network activation. Runtime signals cannot schedule it
 Do not treat enum ordering or a future timestamp in an announcement as evidence of
 production activation.
 
-<!-- REVIEW:Zenith:648d2e5bc9346ed0 -->
+<!-- REVIEW:Zenith:f5bcb99ddbfa192e -->
 <!-- FEATURES:Zenith:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |

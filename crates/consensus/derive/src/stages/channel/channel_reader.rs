@@ -63,13 +63,11 @@ where
                 self.prev.next_data().await?.ok_or(PipelineError::ChannelReaderEmpty.temp())?;
 
             let origin = self.prev.origin().ok_or(PipelineError::MissingOrigin.crit())?;
-            let brotli_enabled = self
-                .cfg
-                .is_feature_active_cascading(BaseFeature::BrotliCompression, origin.timestamp);
-            let max_rlp_bytes_per_channel = if self
-                .cfg
-                .is_feature_active_cascading(BaseFeature::LargeChannels, origin.timestamp)
-            {
+            let [brotli_enabled, large_channels] = BaseFeature::activation_states(
+                [BaseFeature::BrotliCompression, BaseFeature::LargeChannels],
+                |feature| self.cfg.is_feature_active_cascading(feature, origin.timestamp),
+            );
+            let max_rlp_bytes_per_channel = if large_channels {
                 RollupConfig::MAX_RLP_BYTES_PER_CHANNEL_FJORD
             } else {
                 RollupConfig::MAX_RLP_BYTES_PER_CHANNEL_BEDROCK

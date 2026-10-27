@@ -138,10 +138,13 @@ impl<F: ChainProvider + Send> OriginAdvancer for PollingTraversal<F> {
             next_l1_origin.number,
         );
 
-        let reset_pipeline = self.rollup_config.is_feature_activation_block_cascading(
+        // Preserve parent-first, unconditional reads of the live schedule.
+        let parent_active = self
+            .rollup_config
+            .is_feature_active_cascading(BaseFeature::StrictDerivationOrdering, block.timestamp);
+        let next_active = self.rollup_config.is_feature_active_cascading(
             BaseFeature::StrictDerivationOrdering,
             next_l1_origin.timestamp,
-            block.timestamp,
         );
 
         // Update the block origin regardless of if a holocene activation is required.
@@ -151,7 +154,7 @@ impl<F: ChainProvider + Send> OriginAdvancer for PollingTraversal<F> {
 
         // If the prev block is not holocene, but the next is, we need to flag this
         // so the pipeline driver will reset the pipeline for holocene activation.
-        if reset_pipeline {
+        if !parent_active && next_active {
             return Err(ResetError::HoloceneActivation.reset());
         }
 

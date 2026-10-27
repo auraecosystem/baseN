@@ -61,15 +61,13 @@ impl<ChainSpec: Upgrades> BaseBlockAssembler<ChainSpec> {
         let receipts_root = calculate_receipt_root_no_memo(receipts, &self.chain_spec, timestamp);
         let logs_bloom = logs_bloom(receipts.iter().flat_map(|r| r.logs()));
 
-        let requests_hash = self
-            .chain_spec
-            .is_feature_active_at_timestamp(BaseFeature::EmptyRequestsHash, timestamp)
-            .then_some(EMPTY_REQUESTS_HASH);
+        let [empty_requests_hash, message_root] = BaseFeature::activation_states(
+            [BaseFeature::EmptyRequestsHash, BaseFeature::L2ToL1MessageRoot],
+            |feature| self.chain_spec.is_feature_active_at_timestamp(feature, timestamp),
+        );
+        let requests_hash = empty_requests_hash.then_some(EMPTY_REQUESTS_HASH);
 
-        let withdrawals_root = if self
-            .chain_spec
-            .is_feature_active_at_timestamp(BaseFeature::L2ToL1MessageRoot, timestamp)
-        {
+        let withdrawals_root = if message_root {
             // withdrawals root field in block header is used for storage root of L2 predeploy
             // `l2tol1-message-passer`
             Some(

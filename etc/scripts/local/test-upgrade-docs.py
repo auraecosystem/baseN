@@ -96,7 +96,9 @@ Deposit nonce behavior.
 
     def test_inventory_tracks_new_and_deleted_consumers(self):
         self.stamp()
-        self.write("crates/proof/receipt/src/lib.rs", "fn proof() { enabled(BaseFeature::DepositNonce); }")
+        self.write("crates/proof/receipt/src/lib.rs", """
+fn proof() { BaseFeature::activation_states([BaseFeature::DepositNonce], enabled); }
+""")
         self.assertIn("inventory is stale", self.run_cli("check", success=False))
         self.run_cli("stamp", "Regolith")
         guide = (self.root / "docs/guides/UPGRADES.md").read_text()

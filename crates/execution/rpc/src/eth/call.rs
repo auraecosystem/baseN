@@ -95,6 +95,8 @@ where
 
             let chain_spec = this.provider().chain_spec();
             let genesis = chain_spec.genesis_header();
+            let denim_timestamp =
+                chain_spec.feature_activation_timestamp(BaseFeature::SubsecondBlocks);
 
             // Validate block ordering and fill gaps with empty blocks so every entry has an
             // explicit `number` and `time` override and the chain is contiguous (see the
@@ -105,7 +107,7 @@ where
                 &parent,
                 genesis.number(),
                 genesis.timestamp(),
-                &*chain_spec,
+                denim_timestamp,
                 max_simulate_blocks,
             )?;
 
@@ -370,7 +372,7 @@ fn sanitize_base_chain<TxReq, H>(
     parent: &SealedHeader<H>,
     genesis_number: u64,
     genesis_timestamp: u64,
-    chain_spec: &impl Upgrades,
+    denim_timestamp: Option<u64>,
     max_simulate_blocks: u64,
 ) -> Result<Vec<SimBlock<TxReq>>, EthApiError>
 where
@@ -379,7 +381,6 @@ where
     const LEGACY_BLOCK_TIME: u64 = 2;
     const DENIM_BLOCK_TIME_MS: u64 = 200;
 
-    let denim_timestamp = chain_spec.feature_activation_timestamp(BaseFeature::SubsecondBlocks);
     let activation_block = denim_timestamp.map(|timestamp| {
         genesis_number
             .saturating_add(timestamp.saturating_sub(genesis_timestamp).div_ceil(LEGACY_BLOCK_TIME))
@@ -407,10 +408,7 @@ where
         let scheduled = timestamp_for_block(block_number);
         if scheduled > prev_timestamp {
             Some(scheduled)
-        } else if denim_timestamp.is_some()
-            && chain_spec
-                .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, prev_timestamp)
-        {
+        } else if denim_timestamp.is_some_and(|activation| prev_timestamp >= activation) {
             Some(prev_timestamp)
         } else {
             prev_timestamp.checked_add(LEGACY_BLOCK_TIME)
@@ -468,11 +466,8 @@ where
 
         prev_number = target_number;
         let block_time = if let Some(timestamp) = overrides.time {
-            let allows_same_timestamp = denim_timestamp.is_some()
-                && chain_spec
-                    .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, timestamp)
-                && chain_spec
-                    .is_feature_active_at_timestamp(BaseFeature::SubsecondBlocks, prev_timestamp);
+            let allows_same_timestamp = denim_timestamp
+                .is_some_and(|activation| timestamp >= activation && prev_timestamp >= activation);
             if timestamp < prev_timestamp || (timestamp == prev_timestamp && !allows_same_timestamp)
             {
                 return Err(EthApiError::other(EthSimulateError::BlockTimestampInvalid {
@@ -519,7 +514,7 @@ mod tests {
             SealedHeader::seal_slow(Header { number: 5, timestamp: 10, ..Default::default() });
         let blocks = vec![SimBlock::<()>::default(), SimBlock::default(), SimBlock::default()];
 
-        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).unwrap();
+        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).unwrap();
         let timestamps: Vec<_> = blocks
             .iter()
             .map(|block| block.block_overrides.as_ref().unwrap().time.unwrap())
@@ -530,6 +525,10 @@ mod tests {
 
     #[test]
     fn sanitize_base_chain_accepts_repeated_timestamp_after_denim() {
+        let mut chain_spec = denim_spec();
+        let timestamp = chain_spec.feature_activation_timestamp(BaseFeature::SubsecondBlocks);
+        // One request uses its captured boundary even if the schedule is subsequently updated.
+        chain_spec.set_fork(BaseUpgrade::Denim, ForkCondition::Timestamp(20));
         let parent =
             SealedHeader::seal_slow(Header { number: 5, timestamp: 10, ..Default::default() });
         let blocks = vec![SimBlock::<()> {
@@ -537,7 +536,7 @@ mod tests {
             ..Default::default()
         }];
 
-        assert!(sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).is_ok());
+        assert!(sanitize_base_chain(blocks, &parent, 0, 0, timestamp, 256).is_ok());
     }
 
     #[test]
@@ -549,7 +548,7 @@ mod tests {
             ..Default::default()
         }];
 
-        assert!(sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).is_err());
+        assert!(sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).is_err());
     }
 
     #[test]
@@ -565,7 +564,8 @@ mod tests {
                 ..Default::default()
             }];
 
-            assert!(sanitize_base_chain(blocks, &parent, 0, 0, &chain_spec, 256).is_err());
+            let timestamp = chain_spec.feature_activation_timestamp(BaseFeature::SubsecondBlocks);
+            assert!(sanitize_base_chain(blocks, &parent, 0, 0, timestamp, 256).is_err());
         }
     }
 
@@ -581,7 +581,7 @@ mod tests {
             SimBlock::default(),
         ];
 
-        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).unwrap();
+        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).unwrap();
         let timestamps: Vec<_> = blocks
             .iter()
             .map(|block| block.block_overrides.as_ref().unwrap().time.unwrap())
@@ -608,7 +608,7 @@ mod tests {
             },
         ];
 
-        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).unwrap();
+        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).unwrap();
         let timestamps: Vec<_> = blocks
             .iter()
             .map(|block| block.block_overrides.as_ref().unwrap().time.unwrap())

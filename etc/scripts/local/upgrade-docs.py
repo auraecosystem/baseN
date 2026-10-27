@@ -122,7 +122,7 @@ def inventory(root: Path) -> dict[str, tuple[str, str]]:
     used = {
         name for path, text in code.items() if path != REGISTRY
         for name in re.findall(r"BaseFeature::(\w+)", text)
-    } - {"ALL"}
+    } - {"ALL", "activation_states"}
     if used - known:
         raise ValueError(f"unregistered feature uses: {sorted(used - known)}")
     consumers = {

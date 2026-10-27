@@ -66,15 +66,18 @@ where
 {
     /// Creates a new [`BaseBlockExecutor`].
     pub fn new(evm: E, ctx: BaseBlockExecutionCtx, spec: Spec, receipt_builder: R) -> Self {
+        let [deposit_gas_accounting, deposit_nonce_enabled] = BaseFeature::activation_states(
+            [BaseFeature::DepositGasAccounting, BaseFeature::DepositNonce],
+            |feature| {
+                spec.is_feature_active_at_timestamp(
+                    feature,
+                    evm.block().timestamp().saturating_to(),
+                )
+            },
+        );
         Self {
-            deposit_gas_accounting: spec.is_feature_active_at_timestamp(
-                BaseFeature::DepositGasAccounting,
-                evm.block().timestamp().saturating_to(),
-            ),
-            deposit_nonce_enabled: spec.is_feature_active_at_timestamp(
-                BaseFeature::DepositNonce,
-                evm.block().timestamp().saturating_to(),
-            ),
+            deposit_gas_accounting,
+            deposit_nonce_enabled,
             evm,
             system_caller: SystemCaller::new(spec.clone()),
             spec,

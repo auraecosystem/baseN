@@ -1276,9 +1276,12 @@ where
         BuilderMetrics::state_root_calculation_gauge().set(state_root_calculation_time);
     }
 
-    let requests_hash =
-        ctx.is_feature_active(BaseFeature::EmptyRequestsHash).then_some(EMPTY_REQUESTS_HASH);
-    let withdrawals_root = if ctx.is_feature_active(BaseFeature::L2ToL1MessageRoot) {
+    let [empty_requests_hash, message_root] = BaseFeature::activation_states(
+        [BaseFeature::EmptyRequestsHash, BaseFeature::L2ToL1MessageRoot],
+        |feature| ctx.is_feature_active(feature),
+    );
+    let requests_hash = empty_requests_hash.then_some(EMPTY_REQUESTS_HASH);
+    let withdrawals_root = if message_root {
         // withdrawals root field in block header is used for storage root of L2 predeploy
         // `l2tol1-message-passer`
         Some(

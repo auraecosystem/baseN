@@ -195,11 +195,61 @@ features! {
     Keystore => Zenith,
 }
 
+impl BaseFeature {
+    /// Evaluate related features with one activation read per distinct upgrade.
+    ///
+    /// `is_active` must use the same schedule, timestamp and activation semantics for all
+    /// features. Behaviors sharing an upgrade then share its first observed activation state,
+    /// even if the runtime schedule changes during evaluation. Distinct upgrades are read
+    /// separately in feature order; this is not a whole-schedule snapshot.
+    ///
+    /// Use this only where behavior previously shared one gate, not to combine historically
+    /// separate schedule reads.
+    pub fn activation_states<const N: usize>(
+        features: [Self; N],
+        mut is_active: impl FnMut(Self) -> bool,
+    ) -> [bool; N] {
+        let mut active = [false; N];
+        for (index, feature) in features.iter().enumerate() {
+            active[index] = features[..index]
+                .iter()
+                .position(|other| other.activation_upgrade() == feature.activation_upgrade())
+                .map_or_else(|| is_active(*feature), |previous| active[previous]);
+        }
+        active
+    }
+}
+
 impl BaseUpgrade {
     /// Whether this execution upgrade includes `feature`, using historical ordinal semantics.
     ///
     /// Timestamp-based consumers must use their rollup or chain schedule adapter instead.
     pub const fn is_feature_enabled(self, feature: BaseFeature) -> bool {
         feature.activation_upgrade() as u8 <= self as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn related_features_share_activation_state_but_distinct_upgrades_do_not() {
+        for initial in [false, true] {
+            let mut live_state = initial;
+            let states = BaseFeature::activation_states(
+                [
+                    BaseFeature::DepositGasAccounting,
+                    BaseFeature::Withdrawals,
+                    BaseFeature::DepositNonce,
+                ],
+                |_| {
+                    let observed = live_state;
+                    live_state = !initial;
+                    observed
+                },
+            );
+            assert_eq!(states, [initial, !initial, initial]);
+        }
     }
 }
