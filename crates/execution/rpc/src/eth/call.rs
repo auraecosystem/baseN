@@ -11,10 +11,10 @@ use alloy_rpc_types_eth::{
     simulate::{SimBlock, SimulatePayload, SimulatedBlock},
     state::EvmOverrides,
 };
-use base_common_chains::BaseUpgrade;
+use base_common_chains::{BaseFeature, Upgrades};
 use base_execution_chainspec::BaseChainSpec;
 use base_execution_evm::{BaseNextBlockEnvAttributes, BasePendingForecast};
-use reth_chainspec::{ChainSpecProvider, EthChainSpec, EthereumHardforks, Hardforks};
+use reth_chainspec::{ChainSpecProvider, EthChainSpec, EthereumHardforks};
 use reth_errors::RethError;
 use reth_evm::{ConfigureEvm, Evm, HaltReasonFor, execute::BlockBuilder};
 use reth_primitives_traits::SealedHeader;
@@ -95,7 +95,6 @@ where
 
             let chain_spec = this.provider().chain_spec();
             let genesis = chain_spec.genesis_header();
-            let denim_timestamp = chain_spec.fork(BaseUpgrade::Denim).as_timestamp();
 
             // Validate block ordering and fill gaps with empty blocks so every entry has an
             // explicit `number` and `time` override and the chain is contiguous (see the
@@ -106,7 +105,7 @@ where
                 &parent,
                 genesis.number(),
                 genesis.timestamp(),
-                denim_timestamp,
+                &*chain_spec,
                 max_simulate_blocks,
             )?;
 
@@ -371,7 +370,7 @@ fn sanitize_base_chain<TxReq, H>(
     parent: &SealedHeader<H>,
     genesis_number: u64,
     genesis_timestamp: u64,
-    denim_timestamp: Option<u64>,
+    chain_spec: &impl Upgrades,
     max_simulate_blocks: u64,
 ) -> Result<Vec<SimBlock<TxReq>>, EthApiError>
 where
@@ -380,6 +379,8 @@ where
     const LEGACY_BLOCK_TIME: u64 = 2;
     const DENIM_BLOCK_TIME_MS: u64 = 200;
 
+    let denim_timestamp =
+        chain_spec.feature_activation_timestamp(BaseFeature::MillisecondTimestamps);
     let activation_block = denim_timestamp.map(|timestamp| {
         genesis_number
             .saturating_add(timestamp.saturating_sub(genesis_timestamp).div_ceil(LEGACY_BLOCK_TIME))
@@ -407,7 +408,10 @@ where
         let scheduled = timestamp_for_block(block_number);
         if scheduled > prev_timestamp {
             Some(scheduled)
-        } else if denim_timestamp.is_some_and(|activation| prev_timestamp >= activation) {
+        } else if denim_timestamp.is_some()
+            && chain_spec
+                .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, prev_timestamp)
+        {
             Some(prev_timestamp)
         } else {
             prev_timestamp.checked_add(LEGACY_BLOCK_TIME)
@@ -465,8 +469,13 @@ where
 
         prev_number = target_number;
         let block_time = if let Some(timestamp) = overrides.time {
-            let allows_same_timestamp = denim_timestamp
-                .is_some_and(|activation| timestamp >= activation && prev_timestamp >= activation);
+            let allows_same_timestamp = denim_timestamp.is_some()
+                && chain_spec
+                    .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, timestamp)
+                && chain_spec.is_feature_active_at_timestamp(
+                    BaseFeature::MillisecondTimestamps,
+                    prev_timestamp,
+                );
             if timestamp < prev_timestamp || (timestamp == prev_timestamp && !allows_same_timestamp)
             {
                 return Err(EthApiError::other(EthSimulateError::BlockTimestampInvalid {
@@ -495,8 +504,17 @@ where
 #[cfg(test)]
 mod tests {
     use alloy_consensus::Header;
+    use base_common_chains::BaseUpgrade;
+    use base_execution_chainspec::BaseChainSpecBuilder;
+    use reth_chainspec::ForkCondition;
 
     use super::*;
+
+    fn denim_spec() -> BaseChainSpec {
+        BaseChainSpecBuilder::base_mainnet()
+            .with_fork(BaseUpgrade::Denim, ForkCondition::Timestamp(10))
+            .build()
+    }
 
     #[test]
     fn sanitize_base_chain_uses_denim_schedule() {
@@ -504,7 +522,7 @@ mod tests {
             SealedHeader::seal_slow(Header { number: 5, timestamp: 10, ..Default::default() });
         let blocks = vec![SimBlock::<()>::default(), SimBlock::default(), SimBlock::default()];
 
-        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).unwrap();
+        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).unwrap();
         let timestamps: Vec<_> = blocks
             .iter()
             .map(|block| block.block_overrides.as_ref().unwrap().time.unwrap())
@@ -522,7 +540,7 @@ mod tests {
             ..Default::default()
         }];
 
-        assert!(sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).is_ok());
+        assert!(sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).is_ok());
     }
 
     #[test]
@@ -534,7 +552,24 @@ mod tests {
             ..Default::default()
         }];
 
-        assert!(sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).is_err());
+        assert!(sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).is_err());
+    }
+
+    #[test]
+    fn sanitize_base_chain_requires_timestamp_schedule_for_repeated_timestamps() {
+        let parent =
+            SealedHeader::seal_slow(Header { number: 5, timestamp: 10, ..Default::default() });
+        for condition in [ForkCondition::Never, ForkCondition::Block(0)] {
+            let chain_spec = BaseChainSpecBuilder::base_mainnet()
+                .with_fork(BaseUpgrade::Denim, condition)
+                .build();
+            let blocks = vec![SimBlock::<()> {
+                block_overrides: Some(BlockOverrides { time: Some(10), ..Default::default() }),
+                ..Default::default()
+            }];
+
+            assert!(sanitize_base_chain(blocks, &parent, 0, 0, &chain_spec, 256).is_err());
+        }
     }
 
     #[test]
@@ -549,7 +584,7 @@ mod tests {
             SimBlock::default(),
         ];
 
-        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).unwrap();
+        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).unwrap();
         let timestamps: Vec<_> = blocks
             .iter()
             .map(|block| block.block_overrides.as_ref().unwrap().time.unwrap())
@@ -576,7 +611,7 @@ mod tests {
             },
         ];
 
-        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, Some(10), 256).unwrap();
+        let blocks = sanitize_base_chain(blocks, &parent, 0, 0, &denim_spec(), 256).unwrap();
         let timestamps: Vec<_> = blocks
             .iter()
             .map(|block| block.block_overrides.as_ref().unwrap().time.unwrap())

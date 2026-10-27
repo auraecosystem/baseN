@@ -3,7 +3,7 @@
 use std::fmt;
 
 use alloy_consensus::BlockHeader;
-use base_common_chains::Upgrades;
+use base_common_chains::{BaseFeature, Upgrades};
 use base_execution_rpc::SequencerClient;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -76,7 +76,9 @@ where
         header
             .map(|header| header.timestamp())
             .filter(|timestamp| {
-                self.provider.chain_spec().is_everest_active_at_timestamp(*timestamp)
+                self.provider
+                    .chain_spec()
+                    .is_feature_active_at_timestamp(BaseFeature::Eip8430, *timestamp)
             })
             .ok_or_else(|| invalid_params(PAYER_PRE_EVEREST_RPC_ERROR))
     }

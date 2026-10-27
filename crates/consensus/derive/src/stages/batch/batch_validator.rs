@@ -5,7 +5,7 @@ use core::fmt::Debug;
 
 use alloy_eips::BlockNumHash;
 use async_trait::async_trait;
-use base_common_genesis::{RollupConfig, SystemConfig};
+use base_common_genesis::{BaseFeature, RollupConfig, SystemConfig};
 use base_protocol::{Batch, BatchValidity, BlockInfo, L2BlockInfo, SingleBatch};
 
 use super::NextBatchProvider;
@@ -151,7 +151,9 @@ where
         let force_empty_batches = expiry_epoch <= stage_origin.number;
         let first_of_epoch = epoch.number == parent.l1_origin.number + 1;
         let next_timestamp = self.cfg.l2_block_timestamp(parent.block_info.number + 1);
-        let same_second = self.cfg.is_denim_active(next_timestamp)
+        let same_second = self
+            .cfg
+            .is_feature_active_at_timestamp(BaseFeature::SameSecondL1Origin, next_timestamp)
             && next_timestamp == parent.block_info.timestamp;
 
         // If the sequencer window did not expire,
@@ -251,7 +253,9 @@ where
 
         let next_timestamp =
             self.cfg.l2_block_timestamp(parent.block_info.number.saturating_add(1));
-        let needs_ancestry_check = self.cfg.is_denim_active(next_timestamp)
+        let needs_ancestry_check = self
+            .cfg
+            .is_feature_active_at_timestamp(BaseFeature::MillisecondTimestamps, next_timestamp)
             && next_batch.timestamp == next_timestamp
             && next_batch.parent_hash != parent.block_info.hash;
         if needs_ancestry_check {
