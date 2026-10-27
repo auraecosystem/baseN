@@ -32,6 +32,7 @@ features! {
 """)
         for adapter in (
             "genesis/src/rollup.rs", "chains/src/upgrades.rs", "evm/src/spec.rs", "evm2/src/spec.rs",
+            "chains/src/upgrade.rs", "genesis/src/schedule.rs", "evm2/src/transition.rs",
         ):
             self.write("crates/common/" + adapter, "// schedule adapter\n")
         self.write("crates/execution/receipt/src/lib.rs", """
@@ -85,6 +86,24 @@ Deposit nonce behavior.
         self.run_cli("stamp", "Regolith")
         consumer.write_text(consumer.read_text().replace("omit_nonce()", "include_nonce()"))
         self.assertIn("Regolith: production code changed", self.run_cli("check", success=False))
+
+    def test_schedule_changes_without_feature_references_expire_review(self):
+        for path in (
+            "genesis/src/chain/upgrade.rs",
+            "chains/src/upgrade.rs",
+            "genesis/src/schedule.rs",
+            "evm2/src/transition.rs",
+        ):
+            with self.subTest(path=path):
+                schedule = self.root / "crates/common" / path
+                schedule.write_text(schedule.read_text() + "\nfn activation() { configured_time() }\n")
+                self.stamp()
+                schedule.write_text(schedule.read_text().replace("configured_time()", "other_time()"))
+                self.run_cli("sync")
+                errors = self.run_cli("check", success=False)
+                for upgrade in ("Bedrock", "Regolith"):
+                    self.assertIn(f"{upgrade}: production code changed", errors)
+                self.stamp()
 
     def test_attribute_like_source_does_not_stall_inventory(self):
         consumer = self.root / "crates/execution/receipt/src/lib.rs"

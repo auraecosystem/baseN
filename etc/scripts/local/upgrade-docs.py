@@ -26,6 +26,15 @@ ADAPTERS = (
     "crates/common/evm/src/spec.rs",
     "crates/common/evm2/src/spec.rs",
 )
+# Schedule implementations affect activation even without naming a feature variant.
+# Digest coverage does not grant an exemption from the named-fork gate lint.
+DIGEST_SOURCES = (
+    *ADAPTERS,
+    UPGRADES,
+    "crates/common/chains/src/upgrade.rs",
+    "crates/common/genesis/src/schedule.rs",
+    "crates/common/evm2/src/transition.rs",
+)
 # Only schedule machinery and compatibility adapters may ask whether a named fork
 # is active. Tests/benchmarks are excluded separately, not grandfathered here.
 FORK_GATE_ADAPTERS = {
@@ -135,7 +144,7 @@ def inventory(root: Path) -> dict[str, tuple[str, str]]:
     result = {}
     for upgrade in upgrades:
         rows = []
-        evidence = {path: code[path] for path in ADAPTERS}
+        evidence = {path: code[path] for path in DIGEST_SOURCES}
         for feature, activation, description in entries:
             if activation != upgrade:
                 continue
