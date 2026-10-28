@@ -414,5 +414,5 @@ production activation.
 <!-- FEATURES:Zenith:START -->
 | Feature | Behavior | Production code |
 | --- | --- | --- |
-| `Keystore` | Enable experimental EIP-8130 keystore support on genesis-configured chains only. | [`crates/common/evm/src/eip8130.rs`](../../crates/common/evm/src/eip8130.rs), [`crates/execution/txpool/src/validator.rs`](../../crates/execution/txpool/src/validator.rs) |
+| `Keystore` | Enable experimental EIP-8130 keystore support on genesis-configured chains only. | [`crates/common/evm/src/eip8130.rs`](../../crates/common/evm/src/eip8130.rs), [`crates/execution/payer-rpc/src/rpc.rs`](../../crates/execution/payer-rpc/src/rpc.rs), [`crates/execution/txpool/src/validator.rs`](../../crates/execution/txpool/src/validator.rs) |
 <!-- FEATURES:Zenith:END -->
