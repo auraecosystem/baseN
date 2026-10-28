@@ -31,11 +31,12 @@ Keep Base protocol features, their hardfork activations, and cross-stack documen
    parent where relevant. Reuse existing public-API fixtures. Run affected crate
    tests and `no_std` checks for shared/proof dependencies.
 6. Run `python3 etc/scripts/local/upgrade-docs.py sync`. Review the changed feature
-   contracts, linked production code, and each affected upgrade's prose. Update
-   the prose as necessary, then explicitly attest with
-   `python3 etc/scripts/local/upgrade-docs.py stamp <Upgrade> ...`.
-   Run `just check::upgrade-docs`. Do not stamp unseen code just to make CI green;
-   digests are review reminders, not semantic proofs.
+   contracts, linked production code, and each affected upgrade's prose. Review
+   and update prose whenever activation semantics or feature behavior changes,
+   even if feature names and generated tables stay unchanged.
+   Run `just check::upgrade-docs`. It validates registry coverage, generated tables,
+   links, and common named-fork gate bypasses; it does not verify semantic freshness.
+   Protocol review and behavior tests must establish agreement with the prose.
 
 Fork names are still appropriate in schedule machinery, wire/config identifiers,
 upgrade transaction bundles, Ethereum compatibility maps, and historical fixtures.

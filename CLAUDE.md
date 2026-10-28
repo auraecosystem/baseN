@@ -13,7 +13,7 @@
 
 - Use the [managing-upgrades skill](.agents/skills/managing-upgrades/SKILL.md) when implementing or reviewing behavior that activates at a hardfork, including consensus-critical derivation, execution, sequencing, batching, RPC, and proof changes. Benchmark-only and non-protocol work do not require it.
 - [The upgrade guide](docs/guides/UPGRADES.md) documents every Base upgrade, its cross-stack features, and how to determine network activation. [BaseFeature](crates/common/genesis/src/feature.rs) owns the feature-to-upgrade registry. Gate Base behavior by feature; retain Ethereum checks and fork names in schedule machinery.
-- Keep the guide validated against its code with `just check::upgrade-docs`; review changed behavior before stamping documentation digests.
+- Validate registry coverage, generated tables, links, and gate usage with `just check::upgrade-docs`. Review and update the guide's prose for activation or behavior changes even when generated tables are unchanged; structural checks do not establish semantic freshness.
 
 ## Crate Architecture and Public API
 

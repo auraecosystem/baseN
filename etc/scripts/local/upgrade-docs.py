@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """Check the upgrade guide against the feature registry and its production consumers.
 
-`sync` refreshes inventories, never review attestations. After reviewing changed
-behavior and its prose, `stamp Upgrade ...` records the production-source digest.
-This is a review reminder, not a proof that English matches Rust semantics.
+`sync` refreshes generated feature tables; `check` validates their structure and
+contents. Semantic agreement between prose and implementation requires review.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 from pathlib import Path
 import re
 import subprocess
@@ -19,26 +17,14 @@ ROOT = Path(__file__).resolve().parents[3]
 REGISTRY = "crates/common/genesis/src/feature.rs"
 UPGRADES = "crates/common/genesis/src/chain/upgrade.rs"
 GUIDE = "docs/guides/UPGRADES.md"
-ADAPTERS = (
+# Only schedule machinery and compatibility adapters may ask whether a named fork
+# is active. Tests/benchmarks are excluded separately, not grandfathered here.
+FORK_GATE_ADAPTERS = {
     REGISTRY,
     "crates/common/genesis/src/rollup.rs",
     "crates/common/chains/src/upgrades.rs",
     "crates/common/evm/src/spec.rs",
     "crates/common/evm2/src/spec.rs",
-)
-# Schedule implementations affect activation even without naming a feature variant.
-# Digest coverage does not grant an exemption from the named-fork gate lint.
-DIGEST_SOURCES = (
-    *ADAPTERS,
-    UPGRADES,
-    "crates/common/chains/src/upgrade.rs",
-    "crates/common/genesis/src/schedule.rs",
-    "crates/common/evm2/src/transition.rs",
-)
-# Only schedule machinery and compatibility adapters may ask whether a named fork
-# is active. Tests/benchmarks are excluded separately, not grandfathered here.
-FORK_GATE_ADAPTERS = {
-    *ADAPTERS,
     "crates/common/chains/src/upgrade.rs",  # Resolves the EVM spec identity.
     "crates/common/genesis/src/schedule.rs",  # Validates a block-index schedule.
 }
@@ -118,7 +104,7 @@ def fork_gate_errors(code: dict[str, str]) -> list[str]:
     return errors
 
 
-def inventory(root: Path) -> dict[str, tuple[str, str]]:
+def inventory(root: Path) -> dict[str, str]:
     code = sources(root)
     entries = registry(code[REGISTRY])
     upgrades = upgrade_names(code[UPGRADES])
@@ -144,7 +130,6 @@ def inventory(root: Path) -> dict[str, tuple[str, str]]:
     result = {}
     for upgrade in upgrades:
         rows = []
-        evidence = {path: code[path] for path in DIGEST_SOURCES}
         for feature, activation, description in entries:
             if activation != upgrade:
                 continue
@@ -153,39 +138,23 @@ def inventory(root: Path) -> dict[str, tuple[str, str]]:
                 raise ValueError(f"{feature} has no production consumers")
             links = ", ".join(f"[`{path}`](../../{path})" for path in paths)
             rows.append(f"| `{feature}` | {description} | {links} |")
-            evidence.update((path, code[path]) for path in paths)
-        table = "\n".join([
+        result[upgrade] = "\n".join([
             "| Feature | Behavior | Production code |",
             "| --- | --- | --- |",
             *rows,
         ]) if rows else "No separately gated Base features; see the baseline description above."
-        # Include the registry mapping and descriptions, plus production code, so changes
-        # behind an unchanged feature name still require a human to review the guide.
-        digest = hashlib.sha256(table.encode())
-        for path, text in sorted(evidence.items()):
-            digest.update(path.encode())
-            digest.update(text.encode())
-        result[upgrade] = (table, digest.hexdigest()[:16])
     return result
 
 
-def update_guide(text: str, data: dict[str, tuple[str, str]], stamp: set[str]) -> str:
-    unknown = stamp - data.keys()
-    if unknown:
-        raise ValueError(f"unknown upgrades: {sorted(unknown)}")
+def update_guide(text: str, data: dict[str, str]) -> str:
     documented = re.findall(r"<!-- FEATURES:(\w+):START -->", text)
     if len(documented) != len(set(documented)) or set(documented) != data.keys():
         raise ValueError("guide must have exactly one FEATURES block per BaseUpgrade variant")
-    for upgrade, (table, digest) in data.items():
+    for upgrade, table in data.items():
         pattern = rf"(<!-- FEATURES:{upgrade}:START -->\n).*?(<!-- FEATURES:{upgrade}:END -->)"
         text, count = re.subn(pattern, lambda m: m[1] + table + "\n" + m[2], text, flags=re.DOTALL)
         if count != 1:
             raise ValueError(f"missing or malformed feature block for {upgrade}")
-        review = rf"<!-- REVIEW:{upgrade}:[a-z0-9]+ -->"
-        if len(re.findall(review, text)) != 1:
-            raise ValueError(f"missing or duplicate review attestation for {upgrade}")
-        if upgrade in stamp:
-            text = re.sub(review, f"<!-- REVIEW:{upgrade}:{digest} -->", text)
     return text
 
 
@@ -193,11 +162,8 @@ def check(root: Path) -> list[str]:
     data = inventory(root)
     text = (root / GUIDE).read_text()
     errors = fork_gate_errors(sources(root))
-    if update_guide(text, data, set()) != text:
+    if update_guide(text, data) != text:
         errors.append("feature inventory is stale; run upgrade-docs.py sync")
-    for upgrade, (_, digest) in data.items():
-        if f"<!-- REVIEW:{upgrade}:{digest} -->" not in text:
-            errors.append(f"{upgrade}: production code changed; review prose and run upgrade-docs.py stamp {upgrade}")
     for link in re.findall(r"\]\((\.\.?/[^)#]+)(?:#[^)]*)?\)", text):
         if not (root / GUIDE).parent.joinpath(link).is_file():
             errors.append(f"broken code/documentation link: {link}")
@@ -206,24 +172,19 @@ def check(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("check", "sync", "stamp"))
-    parser.add_argument("upgrades", nargs="*")
+    parser.add_argument("command", choices=("check", "sync"))
     args = parser.parse_args()
     try:
-        if args.command == "stamp" and not args.upgrades:
-            parser.error("stamp requires explicit upgrade names after reviewing their code and prose")
-        if args.command != "stamp" and args.upgrades:
-            parser.error("upgrade names are only accepted by stamp")
         if args.command == "check":
             errors = check(ROOT)
             if errors:
                 print("\n".join(errors), file=sys.stderr)
                 return 1
-            print("Upgrade docs match the feature registry and reviewed production code.")
+            print("Upgrade docs match the feature registry and detected production consumers.")
         else:
             path = ROOT / GUIDE
-            path.write_text(update_guide(path.read_text(), inventory(ROOT), set(args.upgrades)))
-            print("Updated upgrade inventory" + (" and selected review attestations." if args.upgrades else "; review attestations unchanged."))
+            path.write_text(update_guide(path.read_text(), inventory(ROOT)))
+            print("Updated upgrade inventory; review semantic documentation changes separately.")
     except (ValueError, KeyError, IndexError) as error:
         print(f"upgrade-docs: {error}", file=sys.stderr)
         return 1

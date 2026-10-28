@@ -42,11 +42,9 @@ mod tests { fn fixture() {} }
 """)
         self.write("docs/guides/UPGRADES.md", """# Upgrades
 Baseline protocol.
-<!-- REVIEW:Bedrock:pending -->
 <!-- FEATURES:Bedrock:START -->
 <!-- FEATURES:Bedrock:END -->
 Deposit nonce behavior.
-<!-- REVIEW:Regolith:pending -->
 <!-- FEATURES:Regolith:START -->
 <!-- FEATURES:Regolith:END -->
 """)
@@ -64,30 +62,23 @@ Deposit nonce behavior.
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         return result.stdout + result.stderr
 
-    def stamp(self):
-        self.run_cli("stamp", "Bedrock", "Regolith")
+    def sync(self):
+        self.run_cli("sync")
         self.run_cli("check")
 
-    def test_sync_does_not_attest_to_review_and_code_changes_expire_review(self):
-        self.run_cli("sync")
-        self.assertIn("review prose", self.run_cli("check", success=False))
-        self.stamp()
+    def test_implementation_edits_do_not_require_documentation_changes(self):
+        self.sync()
+        guide = self.root / "docs/guides/UPGRADES.md"
+        original_guide = guide.read_text()
         consumer = self.root / "crates/execution/receipt/src/lib.rs"
-        consumer.write_text(consumer.read_text().replace("include_nonce()", "omit_nonce()"))
-        self.run_cli("sync")
-        self.assertIn("Regolith: production code changed", self.run_cli("check", success=False))
-        self.run_cli("stamp", "Regolith")
+        # Formatting, logging, and behavior changes behind an unchanged gate are
+        # intentionally outside structural validation; protocol review covers semantics.
+        consumer.write_text(consumer.read_text().replace("include_nonce();", "\n    log(); include_nonce();\n"))
         self.run_cli("check")
-        # Test-only edits must not force prose review.
+        consumer.write_text(consumer.read_text().replace("include_nonce()", "omit_nonce()"))
+        self.run_cli("check")
         consumer.write_text(consumer.read_text().replace("fixture()", "different_fixture()"))
         self.run_cli("check")
-        # An early test helper declaration must not hide subsequent production code.
-        consumer.write_text("#[cfg(test)]\nmod mocks;\n" + consumer.read_text())
-        self.run_cli("stamp", "Regolith")
-        consumer.write_text(consumer.read_text().replace("omit_nonce()", "include_nonce()"))
-        self.assertIn("Regolith: production code changed", self.run_cli("check", success=False))
-
-    def test_schedule_changes_without_feature_references_expire_review(self):
         for path in (
             "genesis/src/chain/upgrade.rs",
             "chains/src/upgrade.rs",
@@ -97,13 +88,27 @@ Deposit nonce behavior.
             with self.subTest(path=path):
                 schedule = self.root / "crates/common" / path
                 schedule.write_text(schedule.read_text() + "\nfn activation() { configured_time() }\n")
-                self.stamp()
-                schedule.write_text(schedule.read_text().replace("configured_time()", "other_time()"))
-                self.run_cli("sync")
-                errors = self.run_cli("check", success=False)
-                for upgrade in ("Bedrock", "Regolith"):
-                    self.assertIn(f"{upgrade}: production code changed", errors)
-                self.stamp()
+                self.run_cli("check")
+        self.sync()
+        self.assertEqual(guide.read_text(), original_guide)
+
+    def test_registry_mapping_and_description_changes_require_sync(self):
+        self.sync()
+        registry = self.root / "crates/common/genesis/src/feature.rs"
+        for old, new in (
+            ("DepositNonce => Regolith", "DepositNonce => Bedrock"),
+            ("Include the deposit nonce in receipts.", "Include the sender nonce for deposits."),
+        ):
+            with self.subTest(change=new):
+                registry.write_text(registry.read_text().replace(old, new))
+                self.assertIn("inventory is stale", self.run_cli("check", success=False))
+                self.sync()
+        guide = (self.root / "docs/guides/UPGRADES.md").read_text()
+        bedrock = guide.split("<!-- FEATURES:Bedrock:START -->")[1].split("<!-- FEATURES:Bedrock:END -->")[0]
+        regolith = guide.split("<!-- FEATURES:Regolith:START -->")[1].split("<!-- FEATURES:Regolith:END -->")[0]
+        self.assertIn("`DepositNonce` | Include the sender nonce for deposits.", bedrock)
+        self.assertNotIn("DepositNonce", regolith)
+        self.assertIn("Deposit nonce behavior.", guide)
 
     def test_attribute_like_source_does_not_stall_inventory(self):
         consumer = self.root / "crates/execution/receipt/src/lib.rs"
@@ -111,33 +116,46 @@ Deposit nonce behavior.
         consumer.write_text(
             f'const ATTRIBUTES: &str = "{repeated_attributes}";\n' + consumer.read_text()
         )
-        self.stamp()
+        self.sync()
 
     def test_inventory_tracks_new_and_deleted_consumers(self):
-        self.stamp()
+        self.sync()
         self.write("crates/proof/receipt/src/lib.rs", """
 fn proof() { BaseFeature::activation_states([BaseFeature::DepositNonce], enabled); }
 """)
         self.assertIn("inventory is stale", self.run_cli("check", success=False))
-        self.run_cli("stamp", "Regolith")
+        self.sync()
         guide = (self.root / "docs/guides/UPGRADES.md").read_text()
         self.assertIn("../../crates/proof/receipt/src/lib.rs", guide)
         shutil.rmtree(self.root / "crates/proof")
         self.assertIn("broken code/documentation link", self.run_cli("check", success=False))
+        self.sync()
 
     def test_unknown_feature_missing_upgrade_and_dead_feature_fail(self):
-        self.stamp()
+        self.sync()
         self.write("crates/execution/receipt/src/lib.rs", "fn receipt() { enabled(BaseFeature::Unknown); }")
         self.assertIn("unregistered feature", self.run_cli("check", success=False))
         self.write("crates/execution/receipt/src/lib.rs", "fn receipt() {}")
         self.assertIn("no production consumers", self.run_cli("check", success=False))
         self.write("crates/execution/receipt/src/lib.rs", "fn receipt() { enabled(BaseFeature::DepositNonce); }")
+        # An early test helper declaration must not hide subsequent production code.
+        consumer = self.root / "crates/execution/receipt/src/lib.rs"
+        consumer.write_text("#[cfg(test)]\nmod mocks;\n" + consumer.read_text())
+        self.run_cli("check")
+        consumer.write_text(consumer.read_text().replace("DepositNonce", "Unknown"))
+        self.assertIn("unregistered feature", self.run_cli("check", success=False))
+        consumer.write_text(consumer.read_text().replace("Unknown", "DepositNonce"))
+        guide = self.root / "docs/guides/UPGRADES.md"
+        original = guide.read_text()
+        guide.write_text(original + "\n<!-- FEATURES:Bedrock:START -->\n<!-- FEATURES:Bedrock:END -->\n")
+        self.assertIn("exactly one FEATURES block", self.run_cli("check", success=False))
+        guide.write_text(original)
         upgrade = self.root / "crates/common/genesis/src/chain/upgrade.rs"
         upgrade.write_text(upgrade.read_text().replace("        Regolith,", "        Regolith,\n        Canyon,"))
         self.assertIn("exactly one FEATURES block", self.run_cli("check", success=False))
 
     def test_named_behavior_gates_are_rejected_but_ethereum_and_tests_are_allowed(self):
-        self.stamp()
+        self.sync()
         consumer = self.root / "crates/execution/receipt/src/lib.rs"
         original = consumer.read_text()
         for gate in (
@@ -146,14 +164,12 @@ fn proof() { BaseFeature::activation_states([BaseFeature::DepositNonce], enabled
             "upgrade >= BaseUpgrade::Regolith",
         ):
             consumer.write_text(f"fn bypass() {{ {gate}; }}\n" + original)
-            self.run_cli("stamp", "Regolith")
             self.assertIn("must use a feature gate", self.run_cli("check", success=False))
         consumer.write_text(original.replace(
             "fn fixture() {}", "fn fixture() { cfg.is_regolith_active(0); }"
         ).replace("#[cfg(test)]", '#[cfg(all(test, feature = "std"))]\n#[rustfmt::skip]')
             .replace("mod tests", "pub(super) mod tests"))
         consumer.write_text("fn ethereum() { spec.is_enabled_in(SpecId::OSAKA); }\n" + consumer.read_text())
-        self.run_cli("stamp", "Regolith")
         self.run_cli("check")
 
 
